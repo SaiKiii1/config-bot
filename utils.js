@@ -7,7 +7,7 @@ export async function DiscordRequest(endpoint, { method = 'GET', body } = {}) {
   const res = await fetch(`${API}/${endpoint}`, {
     method,
     headers: {
-      Authorization: `Bot ${process.env.USER_TOKEN}`,
+      Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
       'Content-Type': 'application/json',
     },
     body: body ? JSON.stringify(body) : undefined,
