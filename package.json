@@ -1,0 +1,16 @@
+{
+  "name": "config-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "register": "node register.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "discord-interactions": "^4.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}
