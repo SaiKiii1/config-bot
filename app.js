@@ -48,7 +48,6 @@ function fmtDelay(s) {
   if (s % 60 === 0) return unit(s / 60, 'minute');
   return unit(s, 'second');
 }
-const fmtShort = (s) => (s % 3600 === 0 ? `${s / 3600}h` : s % 60 === 0 ? `${s / 60}m` : `${s}s`);
 
 const reply = (res, data) =>
   res.send({
@@ -72,12 +71,33 @@ const FIELDS = {
   name: { title: 'Rename config', label: 'Config name', style: 1, max: 50, placeholder: 'e.g. Daily reminder' },
   channelId: { title: 'Set channel ID', label: 'Channel ID', style: 1, max: 20, placeholder: 'e.g. 123456789012345678' },
   text: { title: 'Set text', label: 'Message text', style: 2, max: 1000, placeholder: 'What should I post?' },
-  delay: { title: 'Set delay timer', label: 'Delay (e.g. 30s, 5m, 2h)', style: 1, max: 8, placeholder: '30s, 5m or 2h' },
+  delay: { title: 'Set delay timer' }, // uses three boxes: hours / minutes / seconds
 };
 
+function delayModal(mode, id, current) {
+  const has = current != null;
+  const parts = has
+    ? { hours: Math.floor(current / 3600), minutes: Math.floor((current % 3600) / 60), seconds: current % 60 }
+    : {};
+  const input = (custom_id, label, placeholder) =>
+    row({
+      type: 4, custom_id, label, style: 1, required: false, max_length: 5, placeholder,
+      ...(has ? { value: String(parts[custom_id]) } : {}),
+    });
+  return {
+    type: InteractionResponseType.MODAL,
+    data: {
+      custom_id: `modal:${mode}:${id}:delay`,
+      title: FIELDS.delay.title,
+      components: [input('hours', 'Hours', '0'), input('minutes', 'Minutes', '0'), input('seconds', 'Seconds', '30')],
+    },
+  };
+}
+
 function modal(mode, id, field, current) {
+  if (field === 'delay') return delayModal(mode, id, current);
   const f = FIELDS[field];
-  const value = current == null ? undefined : field === 'delay' ? fmtShort(current) : String(current);
+  const value = current == null ? undefined : String(current);
   return {
     type: InteractionResponseType.MODAL,
     data: {
@@ -187,7 +207,7 @@ const helpEmbed = () => ({
     {
       name: 'Good to know',
       value:
-        `• Delay: ${fmtDelay(MIN_DELAY)} to ${fmtDelay(MAX_DELAY)} (type \`30s\`, \`5m\` or \`2h\`)\n` +
+        `• Delay: ${fmtDelay(MIN_DELAY)} to ${fmtDelay(MAX_DELAY)} — fill in the hours, minutes and seconds boxes\n` +
         `• Up to ${MAX_CONFIGS} configs per person\n` +
         '• The target channel must be in this server, and I need permission to post there',
     },
@@ -319,16 +339,19 @@ async function validate(field, raw, guildId) {
   if (field === 'text') {
     return raw ? { value: raw } : { error: 'The text can\'t be empty.' };
   }
-  if (field === 'delay') {
-    const m = raw.toLowerCase().replace(/\s+/g, '').match(/^(\d+)(s|sec|secs|m|min|mins|h|hr|hrs)?$/);
-    if (!m) return { error: 'Use a number with an optional unit, like `30`, `30s`, `5m` or `2h`.' };
-    const unit = m[2] ?? 's';
-    const n = Number(m[1]) * (unit.startsWith('s') ? 1 : unit.startsWith('m') ? 60 : 3600);
-    if (n < MIN_DELAY || n > MAX_DELAY)
-      return { error: `The delay must be between ${fmtDelay(MIN_DELAY)} and ${fmtDelay(MAX_DELAY)}.` };
-    return { value: n };
-  }
   return { error: 'Unknown field.' };
+}
+
+/** Hours / minutes / seconds boxes -> total seconds. Empty boxes count as 0. */
+function parseDelay(v) {
+  const parts = ['hours', 'minutes', 'seconds'].map((k) => (v[k] ?? '').trim());
+  if (parts.some((p) => p && !/^\d+$/.test(p)))
+    return { error: 'Please use whole numbers only (no letters, decimals or minus signs).' };
+  const [h, m, s] = parts.map((p) => Number(p || 0));
+  const total = h * 3600 + m * 60 + s;
+  if (total < MIN_DELAY || total > MAX_DELAY)
+    return { error: `The total delay must be between ${fmtDelay(MIN_DELAY)} and ${fmtDelay(MAX_DELAY)}. You entered ${total} second${total === 1 ? '' : 's'}.` };
+  return { value: total };
 }
 
 const lookup = (mode, id) => (mode === 'draft' ? store.drafts[id] : store.configs[id]);
@@ -627,8 +650,12 @@ async function handle(req, res) {
     const target = lookup(mode, id);
     if (!target || target.userId !== user.id) return notYours(res);
 
-    const raw = data.components[0].components[0].value.trim();
-    const result = await validate(field, raw, target.guildId);
+    const values = Object.fromEntries(
+      data.components.flatMap((r) => r.components).map((c) => [c.custom_id, c.value ?? '']),
+    );
+    const result = field === 'delay'
+      ? parseDelay(values)
+      : await validate(field, (values.value ?? '').trim(), target.guildId);
     if (result.error) return ephemeral(res, `⚠️ ${result.error}`);
 
     target[field] = result.value;
