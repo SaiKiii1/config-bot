@@ -11,7 +11,7 @@ import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites } from '.
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const store = loadStore();
+const store = await loadStore();
 const save = () => saveStore(store);
 const timers = new Map(); // configId -> setInterval handle
 
@@ -212,6 +212,9 @@ async function validate(field, raw, guildId) {
 }
 
 const lookup = (mode, id) => (mode === 'draft' ? store.drafts[id] : store.configs[id]);
+
+// Health check: Render + an uptime pinger hit this to keep the free service awake.
+app.get('/health', (req, res) => res.send('ok'));
 
 /* ------------------------------------------------------------------ */
 /* Interactions endpoint                                               */
