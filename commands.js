@@ -12,4 +12,5 @@ export const COMMANDS = [
   { ...base, name: 'controller', description: 'Open (or repair) your private controller channel' },
   { ...base, name: 'stop-all', description: 'Stop all of your running configs at once' },
   { ...base, name: 'status', description: 'Check that the bot is online' },
+  { ...base, name: 'add-token', description: 'Add a new bot token to your account' }, // <--- ADD THIS LINE
 ];
