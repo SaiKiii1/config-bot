@@ -3,11 +3,14 @@ import fs from 'node:fs';
 const API = 'https://discord.com/api/v10';
 
 /** Small wrapper around the Discord HTTP API (same idea as the tutorial's DiscordRequest). */
-export async function DiscordRequest(endpoint, { method = 'GET', body } = {}) {
+export async function DiscordRequest(endpoint, { method = 'GET', body, token } = {}) {
+  // If a specific token is provided, use it; otherwise use the main bot token
+  const authHeader = token ? `Bot ${token}` : `Bot ${process.env.DISCORD_TOKEN}`;
+  
   const res = await fetch(`${API}/${endpoint}`, {
     method,
     headers: {
-      Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
+      Authorization: authHeader,
       'Content-Type': 'application/json',
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -27,7 +30,7 @@ export async function DiscordRequest(endpoint, { method = 'GET', body } = {}) {
  * Otherwise -> falls back to a local data.json file (fine for running on your own PC).
  */
 const DB_FILE = new URL('./data.json', import.meta.url);
-const EMPTY = () => ({ users: {}, drafts: {}, configs: {} });
+const EMPTY = () => ({ users: {}, drafts: {}, configs: {}, botIntegrations: {} });
 const SB_URL = process.env.SUPABASE_URL?.replace(/\/$/, '');
 const SB_KEY = process.env.SUPABASE_KEY;
 const USE_SB = Boolean(SB_URL && SB_KEY);
@@ -104,4 +107,24 @@ export function privateOverwrites(guildId, userId) {
       deny: '0',
     },
   ];
+}
+
+export async function createBotIntegration(userId, token, name) {
+  try {
+    const botInfo = await DiscordRequest(`users/@me`, { token });
+    if (!botInfo) throw new Error('Failed to validate token');
+
+    const botName = name || botInfo.username;
+    const botId = botInfo.id;
+
+    return {
+      id: botId,
+      userId,
+      token,
+      username: botName,
+      createdAt: Date.now(),
+    };
+  } catch (err) {
+    throw new Error(`Invalid bot token or API error: ${err.message}`);
+  }
 }
