@@ -15,6 +15,7 @@ const store = await loadStore();
 store.users ??= {};
 store.drafts ??= {};
 store.configs ??= {};
+store.botIntegrations ??= {}; // <--- ADD THIS LINE
 const save = () => saveStore(store);
 const timers = new Map(); // configId -> setInterval handle
 
@@ -94,6 +95,38 @@ function delayModal(mode, id, current) {
   };
 }
 
+function tokenModal() {
+  return {
+    type: InteractionResponseType.MODAL,
+    data: {
+      custom_id: 'modal:add-token',
+      title: 'Add Bot Token',
+      components: [
+        row({
+          type: 4, custom_id: 'token', label: 'Bot Token', style: 1,
+          min_length: 59, max_length: 59, required: true, placeholder: 'MTAwIDIwMCAxMjM0NTY3ODkw',
+        }),
+      ],
+    },
+  };
+}
+
+function botSelectModal(userId) {
+  const integrations = Object.values(store.botIntegrations)
+    .filter((integration) => integration.userId === userId);
+
+  return {
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    data: {
+      flags: InteractionResponseFlags.EPHEMERAL,
+      content: integrations.length > 0
+        ? 'Bot integrations are not implemented yet. Please follow the supported setup process.'
+        : 'You have no registered bot integrations yet. Use /add-token for setup instructions.',
+      allowed_mentions: NO_PINGS,
+    },
+  };
+}
+   
 function modal(mode, id, field, current) {
   if (field === 'delay') return delayModal(mode, id, current);
   const f = FIELDS[field];
@@ -370,6 +403,21 @@ async function handle(req, res) {
 
     if (name === 'help') return reply(res, { embeds: [helpEmbed()] });
     if (!guildId) return ephemeral(res, '⚠️ This command only works inside a server.');
+
+    if (name === 'add-token') {
+  return ephemeral(
+    res,
+    [
+      '**Bot integration setup**',
+      '',
+      'This feature is not fully configured yet.',
+      'Do not paste a Discord account token into this command.',
+      '',
+      'To use a separate bot identity, configure your own Discord bot application and install it in the server with the required permissions.',
+      'The integration must be securely authorized before it can be selected for scheduled messages.',
+    ].join('\n')
+  );
+}
 
     if (name === 'status') {
       const mine = mineOf(guildId, user.id);
