@@ -90,24 +90,23 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     return;
   }
 
-  // Handle edit action immediately before general config lookup
+  // Swap the main card buttons to edit mode instead of using a prohibited ephemeral message
   if (action === 'edit') {
     const cfgId = p[0];
     const cfg = store.configs[cfgId];
     if (!cfg || cfg.userId !== user.id) return notYours(res);
-    return res.send({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        content: `✏️ Select telemetry parameter to modify for **${cfg.name}**:`,
-        flags: InteractionResponseFlags.EPHEMERAL,
-        components: [row(
-          btn(`set:cfg:${cfgId}:name`, 'Rename', 2),
-          btn(`set:cfg:${cfgId}:channelId`, 'Destination ID', 2),
-          btn(`set:cfg:${cfgId}:text`, 'Payload Text', 2),
-          btn(`set:cfg:${cfgId}:delay`, 'Cadence Timer', 2),
-        )],
-      },
-    });
+    
+    const panel = cardPanel(cfgId, cfg);
+    panel.components = [
+      row(
+        btn(`set:cfg:${cfgId}:name`, 'Rename', 2),
+        btn(`set:cfg:${cfgId}:channelId`, 'Destination ID', 2),
+        btn(`set:cfg:${cfgId}:text`, 'Payload Text', 2),
+        btn(`set:cfg:${cfgId}:delay`, 'Cadence Timer', 2),
+        btn(`refresh:${cfgId}`, '🔙 Cancel', 4)
+      )
+    ];
+    return res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: panel });
   }
 
   const cfgId = p[0];

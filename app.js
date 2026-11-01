@@ -2,7 +2,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { InteractionType, verifyKeyMiddleware } from 'discord-interactions';
-import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential } from './utils.js'; 
+import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential } from './utils.js';
 import { startRunner } from './services/runner.js';
 import { handleCommand } from './handlers/commands.js';
 import { handleComponent, handleModalSubmit } from './handlers/components.js';
@@ -133,7 +133,7 @@ async function validate(field, raw, guildId, userId) {
     try {
       const userCreds = store.credentials[userId];
       const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
-      const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null; // <--- FIX: Decrypt here
+      const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
       if (!activeToken) return { error: 'Authentication missing. Run `/add-token register`.' };
       
       const ch = await DiscordRequest(`channels/${raw}`, { token: activeToken });
