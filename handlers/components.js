@@ -39,8 +39,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     const [mode, id, field] = p;
     const target = lookup(mode, id);
     if (!target || target.userId !== user.id) return notYours(res);
-    
-    // Respond directly with the modal to prevent interaction timeouts
     return res.send(modal(mode, id, field, target[field]));
   }
 
@@ -92,11 +90,11 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     return;
   }
 
-  const cfgId = p[0];
-  const cfg = store.configs[cfgId];
-  if (!cfg || cfg.userId !== user.id) return notYours(res);
-
+  // Handle edit action immediately before general config lookup
   if (action === 'edit') {
+    const cfgId = p[0];
+    const cfg = store.configs[cfgId];
+    if (!cfg || cfg.userId !== user.id) return notYours(res);
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
@@ -111,6 +109,10 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       },
     });
   }
+
+  const cfgId = p[0];
+  const cfg = store.configs[cfgId];
+  if (!cfg || cfg.userId !== user.id) return notYours(res);
 
   if (action === 'toggle') {
     cfg.running = !cfg.running;
