@@ -95,14 +95,18 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
   if (!cfg || cfg.userId !== user.id) return notYours(res);
 
   if (action === 'edit') {
-    return reply(res, {
-      content: `✏️ Select telemetry parameter to modify for **${cfg.name}**:`,
-      components: [row(
-        btn(`set:cfg:${cfgId}:name`, 'Rename', 2),
-        btn(`set:cfg:${cfgId}:channelId`, 'Destination ID', 2),
-        btn(`set:cfg:${cfgId}:text`, 'Payload Text', 2),
-        btn(`set:cfg:${cfgId}:delay`, 'Cadence Timer', 2),
-      )],
+    return res.send({
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: {
+        content: `✏️ Select telemetry parameter to modify for **${cfg.name}**:`,
+        flags: InteractionResponseFlags.EPHEMERAL,
+        components: [row(
+          btn(`set:cfg:${cfgId}:name`, 'Rename', 2),
+          btn(`set:cfg:${cfgId}:channelId`, 'Destination ID', 2),
+          btn(`set:cfg:${cfgId}:text`, 'Payload Text', 2),
+          btn(`set:cfg:${cfgId}:delay`, 'Cadence Timer', 2),
+        )],
+      },
     });
   }
 
