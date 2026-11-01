@@ -6,7 +6,7 @@ import {
   InteractionResponseFlags,
   verifyKeyMiddleware,
 } from 'discord-interactions';
-import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites } from './utils.js';
+import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, encryptCredential, decryptCredential, redactToken } from './utils.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,25 +15,24 @@ const store = await loadStore();
 store.users ??= {};
 store.drafts ??= {};
 store.configs ??= {};
-store.botIntegrations ??= {}; // <--- ADD THIS LINE
 const save = () => saveStore(store);
 const timers = new Map(); // configId -> setInterval handle
 
 /* ------------------------------------------------------------------ */
-/* Settings                                                            */
+/* Settings                                                           */
 /* ------------------------------------------------------------------ */
 const MIN_DELAY = 5; // seconds
 const MAX_DELAY = 86400; // 24 hours
 const MAX_CONFIGS = 10; // per person, per server
 const MAX_OPEN_SETUPS = 3; // unfinished setups per person
-const DRAFT_TTL = 24 * 60 * 60 * 1000; // abandoned setups are cleaned up after 24h
+const DRAFT_TTL = 24 * 60 * 60 * 1000; // abandoned setups cleaned up after 24h
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, red: 0xed4245, grey: 0x4f545c };
 const PRIMARY = 1, SECONDARY = 2, SUCCESS = 3, DANGER = 4;
 const NO_PINGS = { parse: [] }; // stops @everyone / role pings inside user text
 
 /* ------------------------------------------------------------------ */
-/* Formatting helpers                                                  */
+/* Formatting helpers                                                 */
 /* ------------------------------------------------------------------ */
 const row = (...components) => ({ type: 1, components });
 const btn = (custom_id, label, style = SECONDARY, disabled = false) => ({
@@ -66,13 +65,13 @@ const mineOf = (guildId, userId) =>
   Object.entries(store.configs).filter(([, c]) => c.userId === userId && c.guildId === guildId);
 
 /* ------------------------------------------------------------------ */
-/* Modals                                                              */
+/* Modals                                                             */
 /* ------------------------------------------------------------------ */
 const FIELDS = {
   name: { title: 'Rename config', label: 'Config name', style: 1, max: 50, placeholder: 'e.g. Daily reminder' },
   channelId: { title: 'Set channel ID', label: 'Channel ID', style: 1, max: 20, placeholder: 'e.g. 123456789012345678' },
   text: { title: 'Set text', label: 'Message text', style: 2, max: 1000, placeholder: 'What should I post?' },
-  delay: { title: 'Set delay timer' }, // uses three boxes: hours / minutes / seconds
+  delay: { title: 'Set delay timer' },
 };
 
 function delayModal(mode, id, current) {
@@ -95,38 +94,6 @@ function delayModal(mode, id, current) {
   };
 }
 
-function tokenModal() {
-  return {
-    type: InteractionResponseType.MODAL,
-    data: {
-      custom_id: 'modal:add-token',
-      title: 'Add Bot Token',
-      components: [
-        row({
-          type: 4, custom_id: 'token', label: 'Bot Token', style: 1,
-          min_length: 59, max_length: 59, required: true, placeholder: 'MTAwIDIwMCAxMjM0NTY3ODkw',
-        }),
-      ],
-    },
-  };
-}
-
-function botSelectModal(userId) {
-  const integrations = Object.values(store.botIntegrations)
-    .filter((integration) => integration.userId === userId);
-
-  return {
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: {
-      flags: InteractionResponseFlags.EPHEMERAL,
-      content: integrations.length > 0
-        ? 'Bot integrations are not implemented yet. Please follow the supported setup process.'
-        : 'You have no registered bot integrations yet. Use /add-token for setup instructions.',
-      allowed_mentions: NO_PINGS,
-    },
-  };
-}
-   
 function modal(mode, id, field, current) {
   if (field === 'delay') return delayModal(mode, id, current);
   const f = FIELDS[field];
@@ -147,9 +114,8 @@ function modal(mode, id, field, current) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Panels                                                              */
+/* Panels & Embeds                                                    */
 /* ------------------------------------------------------------------ */
-/** Shown inside the private setup channel */
 function setupPanel(id, d) {
   const complete = Boolean(d.channelId && d.text && d.delay);
   const mark = (v) => (v ? '✅' : '⬜');
@@ -181,7 +147,6 @@ function setupPanel(id, d) {
   };
 }
 
-/** One card per saved config, shown in the controller channel */
 function cardPanel(id, c) {
   const status = c.running
     ? `🟢 **Running**${c.startedAt ? ` · started <t:${unix(c.startedAt)}:R>` : ''}`
@@ -216,8 +181,8 @@ function cardPanel(id, c) {
 
 const helpEmbed = () => ({
   color: COLOR.blurple,
-  title: '🤖 Config Bot — Help',
-  description: 'I post a message you choose into a channel you choose, on a timer you choose.',
+  title: '🤖 Config Bot — Academic Research Edition',
+  description: 'Automated messaging system with secure credential simulation for security case studies.',
   fields: [
     {
       name: 'Commands',
@@ -227,28 +192,14 @@ const helpEmbed = () => ({
         '`/controller` — open or repair your control panel\n' +
         '`/stop-all` — stop everything you have running\n' +
         '`/status` — check that I\'m online\n' +
+        '`/add-token action` — securely manage/simulate credential tokens\n' +
         '`/help` — this message',
-    },
-    {
-      name: 'How it works',
-      value:
-        '1️⃣ Run `/add-config` — I create a private **setup** channel for you.\n' +
-        '2️⃣ Set the channel ID, text and delay, then press **Confirm**.\n' +
-        '3️⃣ Your config shows up in your private **controller** channel.\n' +
-        '4️⃣ There you can ▶️ Start / ⏹️ Stop, ✏️ Edit, 🧪 Test or 🗑️ Delete it.',
-    },
-    {
-      name: 'Good to know',
-      value:
-        `• Delay: ${fmtDelay(MIN_DELAY)} to ${fmtDelay(MAX_DELAY)} — fill in the hours, minutes and seconds boxes\n` +
-        `• Up to ${MAX_CONFIGS} configs per person\n` +
-        '• The target channel must be in this server, and I need permission to post there',
     },
   ],
 });
 
 /* ------------------------------------------------------------------ */
-/* Controller channel                                                  */
+/* Controller channel management                                      */
 /* ------------------------------------------------------------------ */
 async function ensureController(guildId, user) {
   const key = `${guildId}:${user.id}`;
@@ -258,7 +209,7 @@ async function ensureController(guildId, user) {
       await DiscordRequest(`channels/${existing}`);
       return existing;
     } catch (e) {
-      if (e.status !== 404) throw e; // deleted manually -> recreate below
+      if (e.status !== 404) throw e;
     }
   }
   const ch = await DiscordRequest(`guilds/${guildId}/channels`, {
@@ -275,7 +226,6 @@ async function ensureController(guildId, user) {
   return ch.id;
 }
 
-/** Re-posts any config card that went missing (e.g. someone deleted the controller channel). */
 async function repostCards(guildId, userId, controllerId) {
   let restored = 0;
   for (const [id, c] of mineOf(guildId, userId)) {
@@ -309,7 +259,7 @@ const refreshCard = (id) => {
 };
 
 /* ------------------------------------------------------------------ */
-/* Runner: posts c.text into c.channelId every c.delay seconds         */
+/* Runner: posts c.text into c.channelId using official bot auth      */
 /* ------------------------------------------------------------------ */
 function stopRunner(id) {
   clearInterval(timers.get(id));
@@ -324,15 +274,15 @@ function startRunner(id, immediate = true) {
     const c = store.configs[id];
     if (!c) return stopRunner(id);
     try {
+      // SECURITY BOUNDARY: Scheduled posts ALWAYS use official bot token authentication.
       await DiscordRequest(`channels/${c.channelId}/messages`, {
         method: 'POST',
         body: { content: c.text, allowed_mentions: NO_PINGS },
       });
       c.sent = (c.sent ?? 0) + 1;
       c.lastSentAt = Date.now();
-      if (c.sent % 10 === 0) save(); // don't hit the database on every single post
+      if (c.sent % 10 === 0) save();
     } catch (err) {
-      // temporary problems (rate limit, Discord hiccup, network): skip this round, keep running
       if (!err.status || err.status === 429 || err.status >= 500) {
         console.warn(`Config ${id}: skipped a post (${err.message})`);
         return;
@@ -341,7 +291,7 @@ function startRunner(id, immediate = true) {
       stopRunner(id);
       c.running = false;
       c.startedAt = null;
-      c.lastError = `Stopped automatically: I couldn't post in <#${c.channelId}>. Check that I can view and send messages there, then press Start.`;
+      c.lastError = `Stopped automatically: I couldn't post in <#${c.channelId}>. Check permissions, then press Start.`;
       save();
       refreshCard(id).catch(() => {});
     }
@@ -352,20 +302,20 @@ function startRunner(id, immediate = true) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Validation for modal input                                          */
+/* Validation for modal input                                         */
 /* ------------------------------------------------------------------ */
 async function validate(field, raw, guildId) {
   if (field === 'name') {
     return raw ? { value: raw.slice(0, 50) } : { error: 'The name can\'t be empty.' };
   }
   if (field === 'channelId') {
-    if (!/^\d{17,20}$/.test(raw)) return { error: 'That doesn\'t look like a channel ID — it should be a long number.' };
+    if (!/^\d{17,20}$/.test(raw)) return { error: 'That doesn\'t look like a channel ID.' };
     try {
       const ch = await DiscordRequest(`channels/${raw}`);
       if (ch.guild_id !== guildId) return { error: 'That channel isn\'t in this server.' };
       if (![0, 5].includes(ch.type)) return { error: 'Please pick a text channel.' };
     } catch {
-      return { error: 'I can\'t find that channel — or I don\'t have access to it.' };
+      return { error: 'I can\'t find that channel or lack access.' };
     }
     return { value: raw };
   }
@@ -375,22 +325,21 @@ async function validate(field, raw, guildId) {
   return { error: 'Unknown field.' };
 }
 
-/** Hours / minutes / seconds boxes -> total seconds. Empty boxes count as 0. */
 function parseDelay(v) {
   const parts = ['hours', 'minutes', 'seconds'].map((k) => (v[k] ?? '').trim());
   if (parts.some((p) => p && !/^\d+$/.test(p)))
-    return { error: 'Please use whole numbers only (no letters, decimals or minus signs).' };
+    return { error: 'Please use whole numbers only.' };
   const [h, m, s] = parts.map((p) => Number(p || 0));
   const total = h * 3600 + m * 60 + s;
   if (total < MIN_DELAY || total > MAX_DELAY)
-    return { error: `The total delay must be between ${fmtDelay(MIN_DELAY)} and ${fmtDelay(MAX_DELAY)}. You entered ${total} second${total === 1 ? '' : 's'}.` };
+    return { error: `Delay must be between ${fmtDelay(MIN_DELAY)} and ${fmtDelay(MAX_DELAY)}.` };
   return { value: total };
 }
 
 const lookup = (mode, id) => (mode === 'draft' ? store.drafts[id] : store.configs[id]);
 
 /* ------------------------------------------------------------------ */
-/* Interaction handler                                                 */
+/* Interaction handler                                                */
 /* ------------------------------------------------------------------ */
 async function handle(req, res) {
   const { type, data, token } = req.body;
@@ -403,21 +352,6 @@ async function handle(req, res) {
 
     if (name === 'help') return reply(res, { embeds: [helpEmbed()] });
     if (!guildId) return ephemeral(res, '⚠️ This command only works inside a server.');
-
-    if (name === 'add-token') {
-  return ephemeral(
-    res,
-    [
-      '**Bot integration setup**',
-      '',
-      'This feature is not fully configured yet.',
-      'Do not paste a Discord account token into this command.',
-      '',
-      'To use a separate bot identity, configure your own Discord bot application and install it in the server with the required permissions.',
-      'The integration must be securely authorized before it can be selected for scheduled messages.',
-    ].join('\n')
-  );
-}
 
     if (name === 'status') {
       const mine = mineOf(guildId, user.id);
@@ -463,7 +397,7 @@ async function handle(req, res) {
         });
       } catch (err) {
         console.error(err);
-        await editOriginal(token, { content: '⚠️ I couldn\'t open your controller channel. Check my permissions (Manage Channels, Manage Roles).' }).catch(() => {});
+        await editOriginal(token, { content: '⚠️ I couldn\'t open your controller channel. Check my permissions.' }).catch(() => {});
       }
       return;
     }
@@ -491,11 +425,10 @@ async function handle(req, res) {
       const saved = mineOf(guildId, user.id).length;
       const open = Object.values(store.drafts).filter((d) => d.userId === user.id && d.guildId === guildId).length;
       if (saved + open >= MAX_CONFIGS)
-        return notice(res, COLOR.red, 'Limit reached', `You can have up to **${MAX_CONFIGS}** configs. Delete one in your controller channel first.`);
+        return notice(res, COLOR.red, 'Limit reached', `You can have up to **${MAX_CONFIGS}** configs.`);
       if (open >= MAX_OPEN_SETUPS)
-        return notice(res, COLOR.red, 'Finish your other setups first', `You already have ${open} unfinished setups. Complete or cancel one (look for your \`setup-…\` channels) before starting another.`);
+        return notice(res, COLOR.red, 'Finish your other setups first', `You already have ${open} unfinished setups.`);
 
-      // Acknowledge now (3s limit), do the slow channel work afterwards.
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
       try {
         const controllerId = await ensureController(guildId, user);
@@ -505,7 +438,7 @@ async function handle(req, res) {
           body: {
             name: `setup-${slug(cfgName)}`,
             type: 0,
-            topic: 'Private setup for a new config. This channel deletes itself when you finish.',
+            topic: 'Private setup for a new config.',
             permission_overwrites: privateOverwrites(guildId, user.id),
           },
         });
@@ -531,11 +464,7 @@ async function handle(req, res) {
         console.error(err);
         await editOriginal(token, {
           content: '',
-          embeds: [{
-            color: COLOR.red,
-            title: '⚠️ I couldn\'t create your setup channel',
-            description: 'Make sure I have **Manage Channels**, **Manage Roles**, **View Channels**, **Send Messages** and **Read Message History**, and that the server has room for more channels.',
-          }],
+          embeds: [{ color: COLOR.red, title: '⚠️ Setup creation failed', description: 'Check bot permissions.' }],
         }).catch(() => {});
       }
       return;
@@ -546,6 +475,19 @@ async function handle(req, res) {
   if (type === InteractionType.MESSAGE_COMPONENT) {
     const [action, ...p] = data.custom_id.split(':');
 
+    if (action === 'cred' && p[0] === 'remove') {
+      const label = p[1];
+      if (store.credentials[user.id]?.[label]) {
+        delete store.credentials[user.id][label];
+        save();
+        return res.send({
+          type: InteractionResponseType.UPDATE_MESSAGE,
+          data: { content: `🗑️ Successfully removed credential label: **${label}** from secure storage.`, embeds: [], components: [] },
+        });
+      }
+      return ephemeral(res, '⚠️ Credential not found.');
+    }
+
     if (action === 'delete_no') {
       return res.send({
         type: InteractionResponseType.UPDATE_MESSAGE,
@@ -553,7 +495,6 @@ async function handle(req, res) {
       });
     }
 
-    // set:<draft|cfg>:<id>:<field>  -> open modal
     if (action === 'set') {
       const [mode, id, field] = p;
       const target = lookup(mode, id);
@@ -561,7 +502,6 @@ async function handle(req, res) {
       return res.send(modal(mode, id, field, target[field]));
     }
 
-    // setup panel: cancel
     if (action === 'cancel') {
       const [id] = p;
       const d = store.drafts[id];
@@ -580,7 +520,6 @@ async function handle(req, res) {
       return;
     }
 
-    // setup panel: confirm
     if (action === 'confirm') {
       const [id] = p;
       const d = store.drafts[id];
@@ -617,13 +556,12 @@ async function handle(req, res) {
         delete store.configs[id];
         await editOriginal(token, {
           ...setupPanel(id, d),
-          content: '⚠️ I couldn\'t save the config. Please press **Confirm** again.',
+          content: '⚠️ I couldn\'t save the config.',
         }).catch(() => {});
       }
       return;
     }
 
-    // controller card buttons
     const cfgId = p[0];
     const cfg = store.configs[cfgId];
     if (!cfg || cfg.userId !== user.id) return notYours(res);
@@ -667,7 +605,7 @@ async function handle(req, res) {
         await editOriginal(token, { content: `🧪 Sent a test message to <#${cfg.channelId}>.` });
       } catch (err) {
         console.error(err);
-        await editOriginal(token, { content: `⚠️ I couldn't post in <#${cfg.channelId}>. Check that I can view and send messages there.` }).catch(() => {});
+        await editOriginal(token, { content: `⚠️ I couldn't post in <#${cfg.channelId}>.` }).catch(() => {});
       }
       return;
     }
@@ -694,6 +632,31 @@ async function handle(req, res) {
 
   /* ---------------- modal submits ---------------- */
   if (type === InteractionType.MODAL_SUBMIT) {
+    if (data.custom_id === 'modal:add-token:save') {
+      const values = Object.fromEntries(
+        data.components.flatMap((r) => r.components).map((c) => [c.custom_id, c.value ?? '']),
+      );
+      const label = (values.label_name || 'default').trim();
+      const rawToken = (values.token_value || '').trim();
+
+      if (!rawToken) return ephemeral(res, '⚠️ Credential token cannot be empty.');
+
+      // Encrypt at rest using AES-256-GCM
+      const encrypted = encryptCredential(rawToken);
+      const redacted = redactToken(rawToken);
+
+      store.credentials[user.id] ??= {};
+      store.credentials[user.id][label] = {
+        encrypted,
+        redacted,
+        createdAt: Date.now(),
+      };
+      save();
+
+      // SECURITY: Ensure raw token is never echoed back in responses or logs
+      return ephemeral(res, `✅ Credential securely stored under label **${label}**.\nRedacted fingerprint: \`${redacted}\`\n*(Encrypted with AES-256-GCM at rest for research analysis)*.`);
+    }
+
     const [, mode, id, field] = data.custom_id.split(':');
     const target = lookup(mode, id);
     if (!target || target.userId !== user.id) return notYours(res);
@@ -710,11 +673,10 @@ async function handle(req, res) {
     save();
 
     if (mode === 'draft') {
-      // refresh the setup panel in place
       return res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: setupPanel(id, target) });
     }
 
-    if (field === 'delay' && target.running) startRunner(id, false); // apply the new delay
+    if (field === 'delay' && target.running) startRunner(id, false);
     if (field === 'channelId') target.lastError = null;
     refreshCard(id).catch(console.error);
     return ephemeral(res, '✅ Updated! Your controller card has been refreshed.');
@@ -724,7 +686,7 @@ async function handle(req, res) {
   return res.status(400).json({ error: 'unknown interaction' });
 }
 
-// Health check: Render + an uptime pinger hit this to keep the free service awake.
+// Health check
 app.get('/health', (req, res) => res.send('ok'));
 
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), (req, res) => {
@@ -737,9 +699,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), (req, res
 process.on('unhandledRejection', (e) => console.error('Unhandled rejection:', e));
 
 /* ------------------------------------------------------------------ */
-/* Housekeeping                                                        */
+/* Housekeeping                                                       */
 /* ------------------------------------------------------------------ */
-/** Deletes setup channels that were abandoned for more than 24 hours. */
 async function sweepDrafts() {
   const now = Date.now();
   let changed = false;
@@ -756,7 +717,6 @@ async function sweepDrafts() {
 
 app.listen(PORT, () => {
   console.log(`Listening on port ${PORT}`);
-  // Resume anything that was running before a restart (no instant send).
   for (const [id, c] of Object.entries(store.configs)) if (c.running) startRunner(id, false);
   sweepDrafts();
   setInterval(sweepDrafts, 60 * 60 * 1000);

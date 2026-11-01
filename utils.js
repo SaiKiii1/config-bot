@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 
 const API = 'https://discord.com/api/v10';
 
@@ -24,20 +25,54 @@ export async function DiscordRequest(endpoint, { method = 'GET', body, token } =
   return res.status === 204 ? null : res.json();
 }
 
+/* ---------- secure encryption helpers for research credentials ---------- */
+const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET || crypto.randomBytes(32).toString('hex');
+
+function getEncryptionKey() {
+  return crypto.scryptSync(ENCRYPTION_SECRET, 'salt', 32);
+}
+
+export function encryptCredential(plainText) {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
+  let encrypted = cipher.update(plainText, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const tag = cipher.getAuthTag().toString('hex');
+  return `${iv.toString('hex')}:${tag}:${encrypted}`;
+}
+
+export function decryptCredential(cipherText) {
+  try {
+    const [ivHex, tagHex, encryptedHex] = cipherText.split(':');
+    if (!ivHex || !tagHex || !encryptedHex) return null;
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (err) {
+    console.error('Credential decryption failed:', err.message);
+    return null;
+  }
+}
+
+export function redactToken(token) {
+  if (!token || token.length < 10) return '[REDACTED]';
+  return `${token.slice(0, 4)}...${token.slice(-4)}`;
+}
+
 /* ---------- storage ----------
  * If SUPABASE_URL + SUPABASE_KEY are set -> everything is stored as one JSON row in Supabase
- * (needed on Render's free plan, where the disk is wiped on every restart).
- * Otherwise -> falls back to a local data.json file (fine for running on your own PC).
+ * Otherwise -> falls back to a local data.json file.
  */
 const DB_FILE = new URL('./data.json', import.meta.url);
-const EMPTY = () => ({ users: {}, drafts: {}, configs: {}, botIntegrations: {} });
+const EMPTY = () => ({ users: {}, drafts: {}, configs: {}, botIntegrations: {}, credentials: {} });
 const SB_URL = process.env.SUPABASE_URL?.replace(/\/$/, '');
 const SB_KEY = process.env.SUPABASE_KEY;
 const USE_SB = Boolean(SB_URL && SB_KEY);
 
 const sbHeaders = () => ({
   apikey: SB_KEY,
-  // legacy service_role keys are JWTs and also go in Authorization; new sb_secret_ keys must not
   ...(SB_KEY.startsWith('eyJ') ? { Authorization: `Bearer ${SB_KEY}` } : {}),
   'Content-Type': 'application/json',
 });
@@ -93,15 +128,13 @@ const READ_HISTORY = 1n << 16n;
 
 /**
  * Channel is hidden from everyone except the user and the bot.
- * The user can see + read + press buttons, but can't type (they only use the UI).
  */
 export function privateOverwrites(guildId, userId) {
   return [
-    // @everyone role id == guild id
     { id: guildId, type: 0, allow: '0', deny: String(VIEW_CHANNEL) },
     { id: userId, type: 1, allow: String(VIEW_CHANNEL | READ_HISTORY), deny: String(SEND_MESSAGES) },
     {
-      id: process.env.APP_ID, // a bot user's id equals its application id
+      id: process.env.APP_ID,
       type: 1,
       allow: String(VIEW_CHANNEL | SEND_MESSAGES | READ_HISTORY),
       deny: '0',
