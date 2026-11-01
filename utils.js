@@ -160,4 +160,4 @@ export async function createBotIntegration(userId, token, name) {
   } catch (err) {
     throw new Error(`Invalid bot token or API error: ${err.message}`);
   }
-}
+} 
