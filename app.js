@@ -26,7 +26,6 @@ const MAX_CONFIGS = 10;
 const MAX_OPEN_SETUPS = 3;
 const DRAFT_TTL = 24 * 60 * 60 * 1000;
 
-// Aesthetic Color Palette
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, amber: 0xfee75c, red: 0xed4245, dark: 0x2f3136 };
 const PRIMARY = 1, SECONDARY = 2, SUCCESS = 3, DANGER = 4;
 const NO_PINGS = { parse: [] };
@@ -93,16 +92,16 @@ function credentialInputModal() {
     type: InteractionResponseType.MODAL,
     data: {
       custom_id: 'modal:add-token:save',
-      title: '🔐 Secure Credential Registration',
+      title: '🔐 Secure Credential Registration (Limit: 1)',
       components: [
         row({
           type: 4,
           custom_id: 'label_name',
-          label: 'Credential Profile Identifier',
+          label: 'Token Profile Label',
           style: 1,
           required: true,
           max_length: 50,
-          placeholder: 'e.g., Primary-Simulation-Token',
+          placeholder: 'e.g., My-Primary-Account',
         }),
         row({
           type: 4,
@@ -112,7 +111,7 @@ function credentialInputModal() {
           required: true,
           min_length: 50,
           max_length: 200,
-          placeholder: 'Paste session credential (encrypted with AES-256-GCM)',
+          placeholder: 'Paste session credential (encrypted at rest)',
         }),
       ],
     },
@@ -209,7 +208,7 @@ const helpEmbed = () => ({
     {
       name: '📋 Operational Workflow',
       value:
-        '1️⃣ **`/add-token register`** — Securely inject and encrypt your account session credential.\n' +
+        '1️⃣ **`/add-token register`** — Register your single account token (Limit: 1 per user).\n' +
         '2️⃣ **`/add-config name`** — Provision an isolated configuration pipeline.\n' +
         '3️⃣ **Controller Panel** — Execute, test, and audit automated payload deliveries.',
     },
@@ -219,7 +218,7 @@ const helpEmbed = () => ({
         '`/add-config` · `/list-configs` · `/controller` · `/stop-all` · `/status` · `/add-token`',
     },
   ],
-  footer: { text: 'Academic Cybersecurity Case Study Framework v2.4' },
+  footer: { text: 'Academic Cybersecurity Case Study Framework v2.5' },
 });
 
 async function ensureController(guildId, user) {
@@ -280,8 +279,11 @@ const refreshCard = (id) => {
 };
 
 function stopRunner(id) {
-  clearInterval(timers.get(id));
-  timers.delete(id);
+  const handle = timers.get(id);
+  if (handle) {
+    clearInterval(handle);
+    timers.delete(id);
+  }
 }
 
 function startRunner(id, immediate = true) {
@@ -316,7 +318,12 @@ function startRunner(id, immediate = true) {
       currentConfig.lastSentAt = Date.now();
       if (currentConfig.sent % 10 === 0) save();
     } catch (err) {
-      if (!err.status || err.status === 429 || err.status >= 500) {
+      // Handle rate limits (429) gracefully without killing the runner
+      if (err.status === 429) {
+        console.warn(`Pipeline ${id}: Rate limited by Discord (429). Backing off this round...`);
+        return;
+      }
+      if (!err.status || err.status >= 500) {
         console.warn(`Pipeline ${id}: transient network delay skipped dispatch (${err.message})`);
         return;
       }
@@ -324,7 +331,7 @@ function startRunner(id, immediate = true) {
       stopRunner(id);
       currentConfig.running = false;
       currentConfig.startedAt = null;
-      currentConfig.lastError = `Execution Terminated: API endpoint rejected payload dispatch in <#${currentConfig.channelId}>.`;
+      currentConfig.lastError = `Execution Terminated: API endpoint rejected payload dispatch (${err.message}).`;
       save();
       refreshCard(id).catch(() => {});
     }
@@ -390,6 +397,16 @@ async function handle(req, res) {
       const actionOption = data.options?.find((o) => o.name === 'action')?.value;
 
       if (actionOption === 'register') {
+        // ENFORCE LIMIT: Check if user already registered a token
+        const existingTokens = Object.keys(store.credentials[user.id] || {});
+        if (existingTokens.length >= 1) {
+          return notice(
+            res,
+            COLOR.amber,
+            '⚠️ Token Limit Reached',
+            `Your account is restricted to a maximum of **1** registered user token.\n\nCurrently registered profile: \`${existingTokens[0]}\`\n\nUse `/add-token remove` if you wish to purge and replace it.`
+          );
+        }
         return res.send(credentialInputModal());
       }
 
@@ -402,7 +419,7 @@ async function handle(req, res) {
           name: `🏷️ Profile: ${label}`,
           value: `Registered: <t:${unix(cred.createdAt)}:R>\nFingerprint: \`${cred.redacted}\``,
         }));
-        return reply(res, { embeds: [{ color: COLOR.blurple, title: '🔐 Vault: Registered Credentials', fields }] });
+        return reply(res, { embeds: [{ color: COLOR.blurple, title: '🔐 Vault: Registered Credentials (Limit 1/1)', fields }] });
       }
 
       if (actionOption === 'remove') {
@@ -428,7 +445,7 @@ async function handle(req, res) {
           color: COLOR.green,
           title: '🟢 System Telemetry & Status',
           fields: [
-            { name: '🔒 Credential Vault', value: hasToken ? '✅ Provisioned' : '❌ Unregistered', inline: true },
+            { name: '🔒 Credential Vault', value: hasToken ? '✅ Provisioned (1/1)' : '❌ Unregistered', inline: true },
             { name: '📊 Total Pipelines', value: String(mine.length), inline: true },
             { name: '⚡ Active Runners', value: String(mine.filter(([, c]) => c.running).length), inline: true },
             { name: '🕒 System Uptime', value: `<t:${unix(startedAt)}:R>`, inline: true },
@@ -559,7 +576,7 @@ async function handle(req, res) {
         save();
         return res.send({
           type: InteractionResponseType.UPDATE_MESSAGE,
-          data: { content: `🗑️ **Vault Updated**: Credential profile **${label}** successfully purged.`, embeds: [], components: [] },
+          data: { content: `🗑️ **Vault Updated**: Credential profile **${label}** successfully purged. You can now register a new token.`, embeds: [], components: [] },
         });
       }
       return ephemeral(res, '⚠️ Credential profile not found.');
@@ -719,6 +736,12 @@ async function handle(req, res) {
 
   if (type === InteractionType.MODAL_SUBMIT) {
     if (data.custom_id === 'modal:add-token:save') {
+      // Re-verify limit on submission
+      const existingTokens = Object.keys(store.credentials[user.id] || {});
+      if (existingTokens.length >= 1) {
+        return ephemeral(res, '⚠️ Limit exceeded: You can only register 1 token profile at a time.');
+      }
+
       const values = Object.fromEntries(
         data.components.flatMap((r) => r.components).map((c) => [c.custom_id, c.value ?? '']),
       );
@@ -738,7 +761,7 @@ async function handle(req, res) {
       };
       save();
 
-      return ephemeral(res, `✅ **Credential Secured**: Profile **${label}** encrypted at rest.\nFingerprint: \`${redacted}\`\n*(You may now provision pipelines using \`/add-config\`)*.`);
+      return ephemeral(res, `✅ **Credential Secured (1/1 Limit Reached)**: Profile **${label}** encrypted at rest.\nFingerprint: \`${redacted}\`\n*(You may now provision pipelines using \`/add-config\`)*.`);
     }
 
     const [, mode, id, field] = data.custom_id.split(':');
