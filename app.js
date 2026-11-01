@@ -285,7 +285,6 @@ function startRunner(id, immediate = true) {
   const c = store.configs[id];
   if (!c) return;
 
-  // Retrieve and decrypt the user's registered token
   const userCreds = store.credentials[c.userId];
   const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
   const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
@@ -304,7 +303,6 @@ function startRunner(id, immediate = true) {
     }
 
     try {
-      // RESEARCH AUTOMATION: Posts directly using the user's account token to any target channel ID
       await DiscordRequest(`channels/${currentConfig.channelId}/messages`, {
         method: 'POST',
         token: activeToken,
@@ -332,18 +330,21 @@ function startRunner(id, immediate = true) {
   timers.set(id, setInterval(tick, c.delay * 1000));
 }
 
-async function validate(field, raw, guildId) {
+async function validate(field, raw, guildId, userId) {
   if (field === 'name') {
     return raw ? { value: raw.slice(0, 50) } : { error: 'The name can\'t be empty.' };
   }
   if (field === 'channelId') {
     if (!/^\d{17,20}$/.test(raw)) return { error: 'That doesn\'t look like a channel ID.' };
     try {
-      const ch = await DiscordRequest(`channels/${raw}`);
-      if (ch.guild_id !== guildId) return { error: 'That channel isn\'t in this server.' };
+      const userCreds = store.credentials[userId];
+      const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
+      const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
+
+      const ch = await DiscordRequest(`channels/${raw}`, { token: activeToken });
       if (![0, 5].includes(ch.type)) return { error: 'Please pick a text channel.' };
     } catch {
-      return { error: 'I can\'t find that channel or lack access.' };
+      return { error: 'I can\'t find that channel or your user token lacks access to it.' };
     }
     return { value: raw };
   }
@@ -381,7 +382,6 @@ async function handle(req, res) {
       const actionOption = data.options?.find((o) => o.name === 'action')?.value;
 
       if (actionOption === 'register') {
-        // Return modal directly so it responds within the 3-second limit
         return res.send(credentialInputModal());
       }
 
@@ -478,7 +478,6 @@ async function handle(req, res) {
     }
 
     if (name === 'add-config') {
-      // REQUIREMENT GATE: Do not let user add-config without registering a token first!
       const userTokens = Object.keys(store.credentials[user.id] || {});
       if (!userTokens.length) {
         return notice(
@@ -742,7 +741,7 @@ async function handle(req, res) {
     );
     const result = field === 'delay'
       ? parseDelay(values)
-      : await validate(field, (values.value ?? '').trim(), target.guildId);
+      : await validate(field, (values.value ?? '').trim(), target.guildId, user.id); // Passed user.id here
     if (result.error) return ephemeral(res, `⚠️ ${result.error}`);
 
     target[field] = result.value;
