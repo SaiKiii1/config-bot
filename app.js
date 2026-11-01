@@ -397,14 +397,13 @@ async function handle(req, res) {
       const actionOption = data.options?.find((o) => o.name === 'action')?.value;
 
       if (actionOption === 'register') {
-        // ENFORCE LIMIT: Check if user already registered a token
         const existingTokens = Object.keys(store.credentials[user.id] || {});
         if (existingTokens.length >= 1) {
           return notice(
             res,
             COLOR.amber,
             '⚠️ Token Limit Reached',
-            `Your account is restricted to a maximum of **1** registered user token.\n\nCurrently registered profile: \`${existingTokens[0]}\`\n\nUse `/add-token remove` if you wish to purge and replace it.`
+            `Your account is restricted to a maximum of **1** registered user token.\n\nCurrently registered profile: \`${existingTokens[0]}\`\n\nUse \`/add-token remove\` if you wish to purge and replace it.`
           );
         }
         return res.send(credentialInputModal());
