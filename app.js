@@ -1,7 +1,7 @@
 // app.js
 import 'dotenv/config';
 import express from 'express';
-import { InteractionType, verifyKeyMiddleware } from 'discord-interactions';
+import { InteractionType, InteractionResponseType, verifyKeyMiddleware } from 'discord-interactions';
 import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential } from './utils.js';
 import { startRunner } from './services/runner.js';
 import { handleCommand } from './handlers/commands.js';
