@@ -3,7 +3,7 @@ import { DiscordRequest, decryptCredential } from '../utils.js';
 
 const timers = new Map();
 
-function stopRunner(id, store) {
+export function stopRunner(id, store) {
   const handle = timers.get(id);
   if (handle) {
     clearInterval(handle);
