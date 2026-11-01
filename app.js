@@ -15,25 +15,21 @@ const store = await loadStore();
 store.users ??= {};
 store.drafts ??= {};
 store.configs ??= {};
+store.botIntegrations ??= {};
+store.credentials ??= {};
 const save = () => saveStore(store);
-const timers = new Map(); // configId -> setInterval handle
+const timers = new Map();
 
-/* ------------------------------------------------------------------ */
-/* Settings                                                           */
-/* ------------------------------------------------------------------ */
-const MIN_DELAY = 5; // seconds
-const MAX_DELAY = 86400; // 24 hours
-const MAX_CONFIGS = 10; // per person, per server
-const MAX_OPEN_SETUPS = 3; // unfinished setups per person
-const DRAFT_TTL = 24 * 60 * 60 * 1000; // abandoned setups cleaned up after 24h
+const MIN_DELAY = 5;
+const MAX_DELAY = 86400;
+const MAX_CONFIGS = 10;
+const MAX_OPEN_SETUPS = 3;
+const DRAFT_TTL = 24 * 60 * 60 * 1000;
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, red: 0xed4245, grey: 0x4f545c };
 const PRIMARY = 1, SECONDARY = 2, SUCCESS = 3, DANGER = 4;
-const NO_PINGS = { parse: [] }; // stops @everyone / role pings inside user text
+const NO_PINGS = { parse: [] };
 
-/* ------------------------------------------------------------------ */
-/* Formatting helpers                                                 */
-/* ------------------------------------------------------------------ */
 const row = (...components) => ({ type: 1, components });
 const btn = (custom_id, label, style = SECONDARY, disabled = false) => ({
   type: 2, custom_id, label, style, disabled,
@@ -64,9 +60,6 @@ const editOriginal = (token, body) =>
 const mineOf = (guildId, userId) =>
   Object.entries(store.configs).filter(([, c]) => c.userId === userId && c.guildId === guildId);
 
-/* ------------------------------------------------------------------ */
-/* Modals                                                             */
-/* ------------------------------------------------------------------ */
 const FIELDS = {
   name: { title: 'Rename config', label: 'Config name', style: 1, max: 50, placeholder: 'e.g. Daily reminder' },
   channelId: { title: 'Set channel ID', label: 'Channel ID', style: 1, max: 20, placeholder: 'e.g. 123456789012345678' },
@@ -94,6 +87,37 @@ function delayModal(mode, id, current) {
   };
 }
 
+function credentialInputModal() {
+  return {
+    type: InteractionResponseType.MODAL,
+    data: {
+      custom_id: 'modal:add-token:save',
+      title: 'Register Account User Token',
+      components: [
+        row({
+          type: 4,
+          custom_id: 'label_name',
+          label: 'Token Label / Identifier',
+          style: 1,
+          required: true,
+          max_length: 50,
+          placeholder: 'e.g. My-Primary-Account',
+        }),
+        row({
+          type: 4,
+          custom_id: 'token_value',
+          label: 'Discord User Token',
+          style: 1,
+          required: true,
+          min_length: 50,
+          max_length: 200,
+          placeholder: 'Paste your account token here (encrypted securely)',
+        }),
+      ],
+    },
+  };
+}
+
 function modal(mode, id, field, current) {
   if (field === 'delay') return delayModal(mode, id, current);
   const f = FIELDS[field];
@@ -113,9 +137,6 @@ function modal(mode, id, field, current) {
   };
 }
 
-/* ------------------------------------------------------------------ */
-/* Panels & Embeds                                                    */
-/* ------------------------------------------------------------------ */
 function setupPanel(id, d) {
   const complete = Boolean(d.channelId && d.text && d.delay);
   const mark = (v) => (v ? '✅' : '⬜');
@@ -132,7 +153,7 @@ function setupPanel(id, d) {
         { name: `${mark(d.delay)} Delay`, value: d.delay ? `Every ${fmtDelay(d.delay)}` : '*Not set yet*', inline: true },
         { name: `${mark(d.text)} Message text`, value: d.text ? quote(d.text) : '*Not set yet*' },
       ],
-      footer: { text: '🔒 Private channel — only you can see it.' },
+      footer: { text: '🔒 Private channel — authenticated via user token simulation.' },
     }],
     components: [
       row(
@@ -149,7 +170,7 @@ function setupPanel(id, d) {
 
 function cardPanel(id, c) {
   const status = c.running
-    ? `🟢 **Running**${c.startedAt ? ` · started <t:${unix(c.startedAt)}:R>` : ''}`
+    ? `🟢 **Running (User Token Auth)**${c.startedAt ? ` · started <t:${unix(c.startedAt)}:R>` : ''}`
     : '🔴 **Stopped**';
   return {
     content: '',
@@ -158,13 +179,13 @@ function cardPanel(id, c) {
       description: status + (c.lastError ? `\n⚠️ ${c.lastError}` : ''),
       color: c.lastError ? COLOR.red : c.running ? COLOR.green : COLOR.grey,
       fields: [
-        { name: '📍 Channel', value: `<#${c.channelId}>`, inline: true },
+        { name: '📍 Channel ID', value: `<#${c.channelId}>`, inline: true },
         { name: '⏱️ Delay', value: `Every ${fmtDelay(c.delay)}`, inline: true },
         { name: '📨 Posts sent', value: String(c.sent ?? 0), inline: true },
         { name: '🕒 Last post', value: c.lastSentAt ? `<t:${unix(c.lastSentAt)}:R>` : '—', inline: true },
         { name: '💬 Text', value: quote(c.text) },
       ],
-      footer: { text: 'Stats refresh when you press a button — use 🔄 to see the latest.' },
+      footer: { text: 'Dispatched via registered user account token.' },
     }],
     components: [
       row(
@@ -181,26 +202,19 @@ function cardPanel(id, c) {
 
 const helpEmbed = () => ({
   color: COLOR.blurple,
-  title: '🤖 Config Bot — Academic Research Edition',
-  description: 'Automated messaging system with secure credential simulation for security case studies.',
+  title: '🤖 Config Bot — Research Case Study',
+  description: 'Automated messaging system driven by user account token authentication.',
   fields: [
     {
-      name: 'Commands',
+      name: 'Required Workflow',
       value:
-        '`/add-config name` — create a new config\n' +
-        '`/list-configs` — see all your configs\n' +
-        '`/controller` — open or repair your control panel\n' +
-        '`/stop-all` — stop everything you have running\n' +
-        '`/status` — check that I\'m online\n' +
-        '`/add-token action` — securely manage/simulate credential tokens\n' +
-        '`/help` — this message',
+        '1️⃣ Run `/add-token register` to store your user account token securely.\n' +
+        '2️⃣ Run `/add-config name` to create an automation configuration.\n' +
+        '3️⃣ Complete setup and press **Start** to post messages using your user token.',
     },
   ],
 });
 
-/* ------------------------------------------------------------------ */
-/* Controller channel management                                      */
-/* ------------------------------------------------------------------ */
 async function ensureController(guildId, user) {
   const key = `${guildId}:${user.id}`;
   const existing = store.users[key]?.controllerChannelId;
@@ -259,7 +273,7 @@ const refreshCard = (id) => {
 };
 
 /* ------------------------------------------------------------------ */
-/* Runner: posts c.text into c.channelId using official bot auth      */
+/* Runner: dispatches messages using the user's decrypted account token */
 /* ------------------------------------------------------------------ */
 function stopRunner(id) {
   clearInterval(timers.get(id));
@@ -268,20 +282,37 @@ function stopRunner(id) {
 
 function startRunner(id, immediate = true) {
   stopRunner(id);
-  if (!store.configs[id]) return;
+  const c = store.configs[id];
+  if (!c) return;
+
+  // Retrieve and decrypt the user's registered token
+  const userCreds = store.credentials[c.userId];
+  const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
+  const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
 
   const tick = async () => {
-    const c = store.configs[id];
-    if (!c) return stopRunner(id);
+    const currentConfig = store.configs[id];
+    if (!currentConfig) return stopRunner(id);
+
+    if (!activeToken) {
+      currentConfig.running = false;
+      currentConfig.startedAt = null;
+      currentConfig.lastError = 'Stopped: No registered user token found. Use /add-token first.';
+      save();
+      refreshCard(id).catch(() => {});
+      return stopRunner(id);
+    }
+
     try {
-      // SECURITY BOUNDARY: Scheduled posts ALWAYS use official bot token authentication.
-      await DiscordRequest(`channels/${c.channelId}/messages`, {
+      // RESEARCH AUTOMATION: Posts directly using the user's account token to any target channel ID
+      await DiscordRequest(`channels/${currentConfig.channelId}/messages`, {
         method: 'POST',
-        body: { content: c.text, allowed_mentions: NO_PINGS },
+        token: activeToken,
+        body: { content: currentConfig.text, allowed_mentions: NO_PINGS },
       });
-      c.sent = (c.sent ?? 0) + 1;
-      c.lastSentAt = Date.now();
-      if (c.sent % 10 === 0) save();
+      currentConfig.sent = (currentConfig.sent ?? 0) + 1;
+      currentConfig.lastSentAt = Date.now();
+      if (currentConfig.sent % 10 === 0) save();
     } catch (err) {
       if (!err.status || err.status === 429 || err.status >= 500) {
         console.warn(`Config ${id}: skipped a post (${err.message})`);
@@ -289,21 +320,18 @@ function startRunner(id, immediate = true) {
       }
       console.error(`Config ${id} stopped:`, err.message);
       stopRunner(id);
-      c.running = false;
-      c.startedAt = null;
-      c.lastError = `Stopped automatically: I couldn't post in <#${c.channelId}>. Check permissions, then press Start.`;
+      currentConfig.running = false;
+      currentConfig.startedAt = null;
+      currentConfig.lastError = `Stopped automatically: Failed to post via user token in <#${currentConfig.channelId}>.`;
       save();
       refreshCard(id).catch(() => {});
     }
   };
 
   if (immediate) tick();
-  timers.set(id, setInterval(tick, store.configs[id].delay * 1000));
+  timers.set(id, setInterval(tick, c.delay * 1000));
 }
 
-/* ------------------------------------------------------------------ */
-/* Validation for modal input                                         */
-/* ------------------------------------------------------------------ */
 async function validate(field, raw, guildId) {
   if (field === 'name') {
     return raw ? { value: raw.slice(0, 50) } : { error: 'The name can\'t be empty.' };
@@ -338,32 +366,63 @@ function parseDelay(v) {
 
 const lookup = (mode, id) => (mode === 'draft' ? store.drafts[id] : store.configs[id]);
 
-/* ------------------------------------------------------------------ */
-/* Interaction handler                                                */
-/* ------------------------------------------------------------------ */
 async function handle(req, res) {
   const { type, data, token } = req.body;
   const user = req.body.member?.user ?? req.body.user;
   const guildId = req.body.guild_id;
 
-  /* ---------------- slash commands ---------------- */
   if (type === InteractionType.APPLICATION_COMMAND) {
     const { name } = data;
 
     if (name === 'help') return reply(res, { embeds: [helpEmbed()] });
     if (!guildId) return ephemeral(res, '⚠️ This command only works inside a server.');
 
+    if (name === 'add-token') {
+      const actionOption = data.options?.find((o) => o.name === 'action')?.value;
+
+      if (actionOption === 'register') {
+        // Return modal directly so it responds within the 3-second limit
+        return res.send(credentialInputModal());
+      }
+
+      if (actionOption === 'list') {
+        const userCreds = Object.entries(store.credentials[user.id] || {});
+        if (!userCreds.length) {
+          return notice(res, COLOR.blurple, '🔐 Stored User Tokens', 'You have no registered user tokens yet. Run `/add-token register` first.');
+        }
+        const fields = userCreds.map(([label, cred]) => ({
+          name: `🏷️ ${label}`,
+          value: `Registered: <t:${unix(cred.createdAt)}:R>\nFingerprint: \`${cred.redacted}\``,
+        }));
+        return reply(res, { embeds: [{ color: COLOR.blurple, title: '🔐 Registered User Tokens', fields }] });
+      }
+
+      if (actionOption === 'remove') {
+        const userCreds = Object.keys(store.credentials[user.id] || {});
+        if (!userCreds.length) return ephemeral(res, '⚠️ You have no stored tokens to remove.');
+        return reply(res, {
+          content: '🗑️ Select a token to remove from secure storage:',
+          components: [
+            row(
+              ...userCreds.slice(0, 5).map((label) => btn(`cred:remove:${label}`, label, DANGER))
+            ),
+          ],
+        });
+      }
+    }
+
     if (name === 'status') {
       const mine = mineOf(guildId, user.id);
+      const hasToken = Boolean(Object.keys(store.credentials[user.id] || {}).length);
       const startedAt = Date.now() - process.uptime() * 1000;
       return reply(res, {
         embeds: [{
           color: COLOR.green,
-          title: '✅ I\'m online',
+          title: '✅ Bot Status & Authentication',
           fields: [
-            { name: 'Up since', value: `<t:${unix(startedAt)}:R>`, inline: true },
-            { name: 'Your configs', value: String(mine.length), inline: true },
-            { name: 'Your running configs', value: String(mine.filter(([, c]) => c.running).length), inline: true },
+            { name: 'User Token Registered', value: hasToken ? '✅ Yes' : '❌ No (Required for configs)', inline: true },
+            { name: 'Your Configs', value: String(mine.length), inline: true },
+            { name: 'Running', value: String(mine.filter(([, c]) => c.running).length), inline: true },
           ],
         }],
       });
@@ -397,7 +456,7 @@ async function handle(req, res) {
         });
       } catch (err) {
         console.error(err);
-        await editOriginal(token, { content: '⚠️ I couldn\'t open your controller channel. Check my permissions.' }).catch(() => {});
+        await editOriginal(token, { content: '⚠️ I couldn\'t open your controller channel.' }).catch(() => {});
       }
       return;
     }
@@ -419,6 +478,17 @@ async function handle(req, res) {
     }
 
     if (name === 'add-config') {
+      // REQUIREMENT GATE: Do not let user add-config without registering a token first!
+      const userTokens = Object.keys(store.credentials[user.id] || {});
+      if (!userTokens.length) {
+        return notice(
+          res,
+          COLOR.red,
+          '⚠️ Token Required',
+          'You must register your Discord user account token before creating an automation configuration.\n\nRun `/add-token register` first.'
+        );
+      }
+
       const cfgName = data.options[0].value.trim().slice(0, 50);
       if (!cfgName) return ephemeral(res, '⚠️ Please give your config a name.');
 
@@ -471,7 +541,6 @@ async function handle(req, res) {
     }
   }
 
-  /* ---------------- buttons ---------------- */
   if (type === InteractionType.MESSAGE_COMPONENT) {
     const [action, ...p] = data.custom_id.split(':');
 
@@ -482,10 +551,10 @@ async function handle(req, res) {
         save();
         return res.send({
           type: InteractionResponseType.UPDATE_MESSAGE,
-          data: { content: `🗑️ Successfully removed credential label: **${label}** from secure storage.`, embeds: [], components: [] },
+          data: { content: `🗑️ Successfully removed token label: **${label}** from secure storage.`, embeds: [], components: [] },
         });
       }
-      return ephemeral(res, '⚠️ Credential not found.');
+      return ephemeral(res, '⚠️ Token not found.');
     }
 
     if (action === 'delete_no') {
@@ -598,14 +667,24 @@ async function handle(req, res) {
     if (action === 'test') {
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
       try {
+        const userCreds = store.credentials[user.id];
+        const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
+        const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
+
+        if (!activeToken) {
+          await editOriginal(token, { content: '⚠️ No registered user token found. Use `/add-token register` first.' });
+          return;
+        }
+
         await DiscordRequest(`channels/${cfg.channelId}/messages`, {
           method: 'POST',
+          token: activeToken,
           body: { content: cfg.text, allowed_mentions: NO_PINGS },
         });
-        await editOriginal(token, { content: `🧪 Sent a test message to <#${cfg.channelId}>.` });
+        await editOriginal(token, { content: `🧪 Sent test message via user token to <#${cfg.channelId}>.` });
       } catch (err) {
         console.error(err);
-        await editOriginal(token, { content: `⚠️ I couldn't post in <#${cfg.channelId}>.` }).catch(() => {});
+        await editOriginal(token, { content: `⚠️ Failed to test post via user token. Check channel permissions.` }).catch(() => {});
       }
       return;
     }
@@ -630,7 +709,6 @@ async function handle(req, res) {
     }
   }
 
-  /* ---------------- modal submits ---------------- */
   if (type === InteractionType.MODAL_SUBMIT) {
     if (data.custom_id === 'modal:add-token:save') {
       const values = Object.fromEntries(
@@ -639,9 +717,8 @@ async function handle(req, res) {
       const label = (values.label_name || 'default').trim();
       const rawToken = (values.token_value || '').trim();
 
-      if (!rawToken) return ephemeral(res, '⚠️ Credential token cannot be empty.');
+      if (!rawToken) return ephemeral(res, '⚠️ Token cannot be empty.');
 
-      // Encrypt at rest using AES-256-GCM
       const encrypted = encryptCredential(rawToken);
       const redacted = redactToken(rawToken);
 
@@ -653,8 +730,7 @@ async function handle(req, res) {
       };
       save();
 
-      // SECURITY: Ensure raw token is never echoed back in responses or logs
-      return ephemeral(res, `✅ Credential securely stored under label **${label}**.\nRedacted fingerprint: \`${redacted}\`\n*(Encrypted with AES-256-GCM at rest for research analysis)*.`);
+      return ephemeral(res, `✅ User account token securely stored under label **${label}**.\nRedacted fingerprint: \`${redacted}\`\n*(You can now create automation configs using \`/add-config\`)*.`);
     }
 
     const [, mode, id, field] = data.custom_id.split(':');
@@ -686,7 +762,6 @@ async function handle(req, res) {
   return res.status(400).json({ error: 'unknown interaction' });
 }
 
-// Health check
 app.get('/health', (req, res) => res.send('ok'));
 
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), (req, res) => {
@@ -698,9 +773,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), (req, res
 
 process.on('unhandledRejection', (e) => console.error('Unhandled rejection:', e));
 
-/* ------------------------------------------------------------------ */
-/* Housekeeping                                                       */
-/* ------------------------------------------------------------------ */
 async function sweepDrafts() {
   const now = Date.now();
   let changed = false;
@@ -720,4 +792,4 @@ app.listen(PORT, () => {
   for (const [id, c] of Object.entries(store.configs)) if (c.running) startRunner(id, false);
   sweepDrafts();
   setInterval(sweepDrafts, 60 * 60 * 1000);
-}); 
+});

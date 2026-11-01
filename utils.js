@@ -3,10 +3,10 @@ import crypto from 'node:crypto';
 
 const API = 'https://discord.com/api/v10';
 
-/** Small wrapper around the Discord HTTP API (same idea as the tutorial's DiscordRequest). */
+/** Small wrapper around the Discord HTTP API. Supports both bot tokens and user tokens. */
 export async function DiscordRequest(endpoint, { method = 'GET', body, token } = {}) {
-  // If a specific token is provided, use it; otherwise use the main bot token
-  const authHeader = token ? `Bot ${token}` : `Bot ${process.env.DISCORD_TOKEN}`;
+  // If a custom token is provided, use it directly (user tokens don't use the 'Bot ' prefix)
+  const authHeader = token ? (token.startsWith('Bot ') ? token : token) : `Bot ${process.env.DISCORD_TOKEN}`;
   
   const res = await fetch(`${API}/${endpoint}`, {
     method,
@@ -61,10 +61,7 @@ export function redactToken(token) {
   return `${token.slice(0, 4)}...${token.slice(-4)}`;
 }
 
-/* ---------- storage ----------
- * If SUPABASE_URL + SUPABASE_KEY are set -> everything is stored as one JSON row in Supabase
- * Otherwise -> falls back to a local data.json file.
- */
+/* ---------- storage ---------- */
 const DB_FILE = new URL('./data.json', import.meta.url);
 const EMPTY = () => ({ users: {}, drafts: {}, configs: {}, botIntegrations: {}, credentials: {} });
 const SB_URL = process.env.SUPABASE_URL?.replace(/\/$/, '');
@@ -101,7 +98,7 @@ export function saveStore(store) {
     return;
   }
   latest = store;
-  if (timer) return; // batch rapid changes into one write
+  if (timer) return;
   timer = setTimeout(() => {
     timer = null;
     const snapshot = JSON.parse(JSON.stringify(latest));
@@ -118,7 +115,6 @@ export function saveStore(store) {
   }, 300);
 }
 
-/* ---------- helpers ---------- */
 export const slug = (s) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'config';
 
@@ -126,9 +122,6 @@ const VIEW_CHANNEL = 1n << 10n;
 const SEND_MESSAGES = 1n << 11n;
 const READ_HISTORY = 1n << 16n;
 
-/**
- * Channel is hidden from everyone except the user and the bot.
- */
 export function privateOverwrites(guildId, userId) {
   return [
     { id: guildId, type: 0, allow: '0', deny: String(VIEW_CHANNEL) },
@@ -141,23 +134,3 @@ export function privateOverwrites(guildId, userId) {
     },
   ];
 }
-
-export async function createBotIntegration(userId, token, name) {
-  try {
-    const botInfo = await DiscordRequest(`users/@me`, { token });
-    if (!botInfo) throw new Error('Failed to validate token');
-
-    const botName = name || botInfo.username;
-    const botId = botInfo.id;
-
-    return {
-      id: botId,
-      userId,
-      token,
-      username: botName,
-      createdAt: Date.now(),
-    };
-  } catch (err) {
-    throw new Error(`Invalid bot token or API error: ${err.message}`);
-  }
-} 
