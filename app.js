@@ -345,10 +345,14 @@ async function validate(field, raw, guildId, userId) {
       const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
       const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
 
+      if (!activeToken) {
+        return { error: 'Authentication missing: You must register your user token using `/add-token register` before configuring channels.' };
+      }
+
       const ch = await DiscordRequest(`channels/${raw}`, { token: activeToken });
       if (![0, 5].includes(ch.type)) return { error: 'Target destination must be a valid text channel.' };
-    } catch {
-      return { error: 'Target resolution failed: Channel inaccessible or token lacks required scope.' };
+    } catch (err) {
+      return { error: 'Target resolution failed: Channel inaccessible or your user token lacks scope for this channel.' };
     }
     return { value: raw };
   }
