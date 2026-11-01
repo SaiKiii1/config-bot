@@ -341,14 +341,19 @@ async function validate(field, raw, guildId, userId) {
       const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
       const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
 
-      // Validate channel using the user token. 
-      // Note: We remove the strict guildId check here so user tokens can target channels in any server the user belongs to!
+      if (!activeToken) {
+        return { error: 'No active user token found in storage for your account. Please run /add-token register first.' };
+      }
+
+      // Test fetching the channel using the user token
       const ch = await DiscordRequest(`channels/${raw}`, { token: activeToken });
       if (![0, 5].includes(ch.type)) return { error: 'Please pick a text channel.' };
-    } catch {
-      return { error: 'I can\'t find that channel or your user token lacks access to it.' };
+      
+      return { value: raw };
+    } catch (err) {
+      console.error(`Channel validation error for ID ${raw}:`, err.message);
+      return { error: `Validation failed: ${err.message}` };
     }
-    return { value: raw };
   }
   if (field === 'text') {
     return raw ? { value: raw } : { error: 'The text can\'t be empty.' };
