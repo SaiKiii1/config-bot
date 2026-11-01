@@ -341,6 +341,8 @@ async function validate(field, raw, guildId, userId) {
       const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
       const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
 
+      // Validate channel using the user token. 
+      // Note: We remove the strict guildId check here so user tokens can target channels in any server the user belongs to!
       const ch = await DiscordRequest(`channels/${raw}`, { token: activeToken });
       if (![0, 5].includes(ch.type)) return { error: 'Please pick a text channel.' };
     } catch {
