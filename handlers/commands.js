@@ -23,9 +23,9 @@ const helpEmbed = () => ({
     {
       name: '📋 Operational Workflow',
       value:
-        '1️⃣ **`/add-token register`** — Register your single account token (Limit: 1 per user).\n' +
+        '1️⃣ **`/add-token register`** — Register your single account token.\n' +
         '2️⃣ **`/add-config name`** — Provision an isolated configuration pipeline.\n' +
-        '3️⃣ **Controller Panel** — Execute, test, and audit automated payload deliveries.',
+        '3️⃣ **Controller Panel** — Execute, test, and audit payloads.',
     },
   ],
   footer: { text: 'Academic Cybersecurity Case Study Framework v2.6' },
@@ -38,18 +38,8 @@ export function credentialInputModal() {
       custom_id: 'modal:add-token:save',
       title: '🔐 Secure Credential Registration (Limit: 1)',
       components: [
-        {
-          type: 1,
-          components: [{
-            type: 4, custom_id: 'label_name', label: 'Token Profile Label', style: 1, required: true, max_length: 50, placeholder: 'e.g., My-Primary-Account'
-          }]
-        },
-        {
-          type: 1,
-          components: [{
-            type: 4, custom_id: 'token_value', label: 'Discord Account Session Token', style: 1, required: true, min_length: 50, max_length: 200, placeholder: 'Paste session credential (encrypted at rest)'
-          }]
-        }
+        { type: 1, components: [{ type: 4, custom_id: 'label_name', label: 'Token Profile Label', style: 1, required: true, max_length: 50, placeholder: 'e.g., My-Primary-Account' }] },
+        { type: 1, components: [{ type: 4, custom_id: 'token_value', label: 'Discord Account Session Token', style: 1, required: true, min_length: 50, max_length: 200, placeholder: 'Paste session credential (encrypted at rest)' }] }
       ],
     },
   };
@@ -60,10 +50,62 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   const user = req.body.member?.user ?? req.body.user;
   const guildId = req.body.guild_id;
   const { name } = data;
+  
+  const ADMIN_ID = process.env.ADMIN_ID;
 
   if (name === 'help') return reply(res, { embeds: [helpEmbed()] });
   if (!guildId) return ephemeral(res, '⚠️ **Context Error**: Command execution restricted to guild servers.');
 
+  // --- AUTHORIZATION GATE ---
+  if (name !== 'grant-access' && name !== 'revoke-access') {
+    const access = store.access[user.id];
+    const now = Date.now();
+    
+    // Admins bypass the gate automatically
+    if (user.id !== ADMIN_ID) {
+      if (!access || (access.expiresAt !== 'permanent' && now > access.expiresAt)) {
+        if (access) {
+          delete store.access[user.id]; // Purge expired clearance immediately
+          saveStore(store);
+        }
+        return notice(res, COLOR.red, '🚫 Clearance Required', 'You do not have active security clearance to operate this framework. Please contact the administrator.');
+      }
+    }
+  }
+
+  // --- ACCESS MANAGEMENT (ADMIN ONLY) ---
+  if (name === 'grant-access') {
+    if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
+    const targetUser = data.options.find(o => o.name === 'user').value;
+    const duration = data.options.find(o => o.name === 'duration').value;
+    
+    let expiresAt;
+    let label;
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    
+    switch(duration) {
+      case '24h': expiresAt = now + DAY; label = '24 Hours'; break;
+      case '3d': expiresAt = now + (3 * DAY); label = '3 Days'; break;
+      case '1w': expiresAt = now + (7 * DAY); label = '1 Week'; break;
+      case '1m': expiresAt = now + (30 * DAY); label = '1 Month'; break;
+      case 'perm': expiresAt = 'permanent'; label = 'Permanent'; break;
+    }
+
+    store.access[targetUser] = { grantedAt: now, expiresAt, durationLabel: label };
+    saveStore(store);
+    return notice(res, COLOR.green, '✅ Clearance Granted', `Operator <@${targetUser}> has been authorized.\n**Duration:** ${label}`);
+  }
+
+  if (name === 'revoke-access') {
+    if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
+    const targetUser = data.options.find(o => o.name === 'user').value;
+    delete store.access[targetUser];
+    saveStore(store);
+    return notice(res, COLOR.green, '🗑️ Clearance Revoked', `Operator <@${targetUser}> authorization terminated.`);
+  }
+
+  // --- STANDARD COMMANDS ---
   if (name === 'add-token') {
     const actionOption = data.options?.find((o) => o.name === 'action')?.value;
 
@@ -103,13 +145,15 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (name === 'status') {
     const mine = mineOf(guildId, user.id);
     const hasToken = Boolean(Object.keys(store.credentials[user.id] || {}).length);
+    const clearance = store.access[user.id] || (user.id === ADMIN_ID ? { durationLabel: 'Admin Overwrite' } : null);
+    
     return reply(res, {
       embeds: [{
         color: COLOR.green,
         title: '🟢 System Telemetry & Status',
         fields: [
-          { name: '🔒 Credential Vault', value: hasToken ? '✅ Provisioned (1/1)' : '❌ Unregistered', inline: true },
-          { name: '📊 Total Pipelines', value: String(mine.length), inline: true },
+          { name: '🔒 Credential Vault', value: hasToken ? '✅ Provisioned' : '❌ Unregistered', inline: true },
+          { name: '🛡️ Clearance', value: clearance ? clearance.durationLabel : '❌ Revoked', inline: true },
           { name: '⚡ Active Runners', value: String(mine.filter(([, c]) => c.running).length), inline: true },
         ],
       }],
