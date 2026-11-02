@@ -15,6 +15,7 @@ store.users ??= {};
 store.drafts ??= {};
 store.configs ??= {};
 store.credentials ??= {};
+store.access ??= {}; // NEW: Stores user clearance expirations
 const save = () => saveStore(store);
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, red: 0xed4245, grey: 0x4f545c };
