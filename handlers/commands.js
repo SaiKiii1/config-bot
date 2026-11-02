@@ -1,7 +1,7 @@
 // handlers/commands.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
 import { DiscordRequest, slug, privateOverwrites, redactToken } from '../utils.js';
-import { stopAllRunnersForUser } from '../services/runner.js';
+import { stopAllRunnersForUser, stopRunner } from '../services/runner.js';
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, amber: 0xfee75c, red: 0xed4245 };
 const MAX_CONFIGS = 10;
@@ -101,8 +101,21 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
     const targetUser = data.options.find(o => o.name === 'user').value;
     delete store.access[targetUser];
+
+    // SYSTEM-WIDE KILL SWITCH: Halt all running pipelines for the revoked user
+    let terminated = 0;
+    for (const [id, c] of Object.entries(store.configs)) {
+      if (c.userId === targetUser && c.running) {
+        stopRunner(id, store);
+        c.running = false;
+        c.startedAt = null;
+        c.lastError = '⚠️ Access Revoked: Security clearance terminated by administrator.';
+        terminated++;
+      }
+    }
+
     saveStore(store);
-    return notice(res, COLOR.green, '🗑️ Clearance Revoked', `Operator <@${targetUser}> authorization terminated.`);
+    return notice(res, COLOR.green, '🗑️ Clearance Revoked', `Operator <@${targetUser}> authorization terminated.\n🛑 **${terminated} active pipeline(s) halted.**`);
   }
 
   // --- STANDARD COMMANDS ---
