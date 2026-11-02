@@ -100,22 +100,27 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (name === 'revoke-access') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
     const targetUser = data.options.find(o => o.name === 'user').value;
+    
+    // 1. Revoke clearance
     delete store.access[targetUser];
+    
+    // 2. Purge their security vault (Delete stored Discord tokens)
+    delete store.credentials[targetUser];
 
-    // SYSTEM-WIDE KILL SWITCH: Halt all running pipelines for the revoked user
+    // 3. Halt pipelines & destroy their configurations
     let terminated = 0;
     for (const [id, c] of Object.entries(store.configs)) {
-      if (c.userId === targetUser && c.running) {
-        stopRunner(id, store);
-        c.running = false;
-        c.startedAt = null;
-        c.lastError = '⚠️ Access Revoked: Security clearance terminated by administrator.';
+      if (c.userId === targetUser) {
+        if (c.running) stopRunner(id, store);
+        // Attempt to delete their controller card from Discord
+        DiscordRequest(`channels/${c.controllerChannelId}/messages/${c.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
+        delete store.configs[id];
         terminated++;
       }
     }
 
     saveStore(store);
-    return notice(res, COLOR.green, '🗑️ Clearance Revoked', `Operator <@${targetUser}> authorization terminated.\n🛑 **${terminated} active pipeline(s) halted.**`);
+    return notice(res, COLOR.green, '🗑️ Operator Purged', `Operator <@${targetUser}> authorization terminated.\n🛑 **${terminated} pipeline(s) destroyed and credential vault wiped.**`);
   }
 
   // --- STANDARD COMMANDS ---
