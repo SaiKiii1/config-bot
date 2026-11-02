@@ -1,11 +1,10 @@
+// utils.js
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 
 const API = 'https://discord.com/api/v10';
 
-/** Small wrapper around the Discord HTTP API. Supports both bot tokens and user tokens. */
 export async function DiscordRequest(endpoint, { method = 'GET', body, token } = {}) {
-  // If a custom token is provided, use it directly (user tokens don't use the 'Bot ' prefix)
   const authHeader = token ? (token.startsWith('Bot ') ? token : token) : `Bot ${process.env.DISCORD_TOKEN}`;
   
   const res = await fetch(`${API}/${endpoint}`, {
@@ -63,7 +62,7 @@ export function redactToken(token) {
 
 /* ---------- storage ---------- */
 const DB_FILE = new URL('./data.json', import.meta.url);
-const EMPTY = () => ({ users: {}, drafts: {}, configs: {}, botIntegrations: {}, credentials: {} });
+const EMPTY = () => ({ users: {}, drafts: {}, configs: {}, botIntegrations: {}, credentials: {}, access: {} });
 const SB_URL = process.env.SUPABASE_URL?.replace(/\/$/, '');
 const SB_KEY = process.env.SUPABASE_KEY;
 const USE_SB = Boolean(SB_URL && SB_KEY);
@@ -118,14 +117,15 @@ export function saveStore(store) {
 export const slug = (s) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'config';
 
+/* ---------- role-based channel permissions ---------- */
 const VIEW_CHANNEL = 1n << 10n;
 const SEND_MESSAGES = 1n << 11n;
 const READ_HISTORY = 1n << 16n;
 
 export function privateOverwrites(guildId, userId) {
-  return [
+  const overwrites = [
     { id: guildId, type: 0, allow: '0', deny: String(VIEW_CHANNEL) },
-    { id: userId, type: 1, allow: String(VIEW_CHANNEL | READ_HISTORY), deny: String(SEND_MESSAGES) },
+    { id: userId, type: 1, allow: String(VIEW_CHANNEL | READ_HISTORY | SEND_MESSAGES), deny: '0' },
     {
       id: process.env.APP_ID,
       type: 1,
@@ -133,4 +133,16 @@ export function privateOverwrites(guildId, userId) {
       deny: '0',
     },
   ];
+
+  // Explicitly add the Master Admin to the channel if they are not the creator
+  if (process.env.ADMIN_ID && process.env.ADMIN_ID !== userId) {
+    overwrites.push({
+      id: process.env.ADMIN_ID,
+      type: 1,
+      allow: String(VIEW_CHANNEL | READ_HISTORY | SEND_MESSAGES),
+      deny: '0'
+    });
+  }
+
+  return overwrites;
 }
