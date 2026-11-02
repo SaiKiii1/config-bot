@@ -24,6 +24,20 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     const currentConfig = store.configs[id];
     if (!currentConfig) return stopRunner(id, store);
 
+    // AUTOMATIC EXPIRY KILL SWITCH
+    const ADMIN_ID = process.env.ADMIN_ID;
+    const access = store.access[currentConfig.userId];
+    const now = Date.now();
+    
+    if (currentConfig.userId !== ADMIN_ID && (!access || (access.expiresAt !== 'permanent' && now > access.expiresAt))) {
+      currentConfig.running = false;
+      currentConfig.startedAt = null;
+      currentConfig.lastError = '⚠️ Access Expired: Security clearance time limit reached.';
+      saveStore(store);
+      if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
+      return stopRunner(id, store);
+    }
+
     if (!activeToken) {
       currentConfig.running = false;
       currentConfig.startedAt = null;
