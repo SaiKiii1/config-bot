@@ -18,6 +18,18 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
   const user = req.body.member?.user ?? req.body.user;
   const [action, ...p] = data.custom_id.split(':');
 
+  // --- COMPONENT AUTHORIZATION GATE ---
+  const ADMIN_ID = process.env.ADMIN_ID;
+  const access = store.access[user.id];
+  const now = Date.now();
+
+  if (user.id !== ADMIN_ID) {
+    if (!access || (access.expiresAt !== 'permanent' && now > access.expiresAt)) {
+      return ephemeral(res, '🚫 Clearance Required: Your security clearance has expired or been revoked. You cannot interact with these controls.');
+    }
+  }
+  // ------------------------------------
+
   if (action === 'cred' && p[0] === 'remove') {
     const label = p[1];
     if (store.credentials[user.id]?.[label]) {
@@ -90,7 +102,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     return;
   }
 
-  // Swap the main card buttons to edit mode instead of using a prohibited ephemeral message
   if (action === 'edit') {
     const cfgId = p[0];
     const cfg = store.configs[cfgId];
@@ -167,6 +178,18 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
 export async function handleModalSubmit(req, res, store, saveStore, lookup, validate, parseDelay, refreshCard, setupPanel) {
   const { data } = req.body;
   const user = req.body.member?.user ?? req.body.user;
+
+  // --- MODAL AUTHORIZATION GATE ---
+  const ADMIN_ID = process.env.ADMIN_ID;
+  const access = store.access[user.id];
+  const now = Date.now();
+
+  if (user.id !== ADMIN_ID) {
+    if (!access || (access.expiresAt !== 'permanent' && now > access.expiresAt)) {
+      return ephemeral(res, '🚫 Clearance Required: Your security clearance has expired or been revoked.');
+    }
+  }
+  // --------------------------------
 
   if (data.custom_id === 'modal:add-token:save') {
     if (Object.keys(store.credentials[user.id] || {}).length >= 1) {
