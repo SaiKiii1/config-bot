@@ -162,7 +162,7 @@ app.get('/health', (req, res) => res.send('ok'));
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), (req, res) => {
   const { type } = req.body;
   if (type === InteractionType.APPLICATION_COMMAND) {
-    handleCommand(req, res, store, save, mineOf, ensureController, repostCards, editOriginal, setupPanel, btn, row).catch(console.error);
+    handleCommand(req, res, store, save, mineOf, ensureController, repostCards, editOriginal, setupPanel, btn, row, refreshCard).catch(console.error);
   } else if (type === InteractionType.MESSAGE_COMPONENT) {
     handleComponent(req, res, store, save, lookup, modal, setupPanel, cardPanel, validate, parseDelay, refreshCard, editOriginal, btn, row).catch(console.error);
   } else if (type === InteractionType.MODAL_SUBMIT) {

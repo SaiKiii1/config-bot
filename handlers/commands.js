@@ -45,7 +45,7 @@ export function credentialInputModal() {
   };
 }
 
-export async function handleCommand(req, res, store, saveStore, mineOf, ensureController, repostCards, editOriginal, setupPanel, btn, row) {
+export async function handleCommand(req, res, store, saveStore, mineOf, ensureController, repostCards, editOriginal, setupPanel, btn, row, refreshCard) {
   const { data, token } = req.body;
   const user = req.body.member?.user ?? req.body.user;
   const guildId = req.body.guild_id;
@@ -209,9 +209,15 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     return;
   }
 
-  if (name === 'stop-all') {
+if (name === 'stop-all') {
     res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
     const stopped = stopAllRunnersForUser(guildId, user.id, store, saveStore);
+    
+    // NEW: Ping Discord to visually update the controller cards to "Paused"
+    for (const [id] of stopped) {
+      refreshCard(id).catch(() => {});
+    }
+
     await editOriginal(token, {
       content: stopped.length ? `⏹️ **Emergency Halt**: Successfully terminated ${stopped.length} active pipeline(s).` : 'ℹ️ No active pipelines were running.',
     }).catch(() => {});
