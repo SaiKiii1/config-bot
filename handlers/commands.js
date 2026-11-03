@@ -1,6 +1,6 @@
 // handlers/commands.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
-import { DiscordRequest, slug, privateOverwrites, redactToken } from '../utils.js';
+import { DiscordRequest, slug, privateOverwrites, redactToken, sendDM } from '../utils.js';
 import { stopAllRunnersForUser, stopRunner } from '../services/runner.js';
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, amber: 0xfee75c, red: 0xed4245 };
@@ -61,11 +61,10 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     const access = store.access[user.id];
     const now = Date.now();
     
-    // Admins bypass the gate automatically
     if (user.id !== ADMIN_ID) {
       if (!access || (access.expiresAt !== 'permanent' && now > access.expiresAt)) {
         if (access) {
-          delete store.access[user.id]; // Purge expired clearance immediately
+          delete store.access[user.id];
           saveStore(store);
         }
         return notice(res, COLOR.red, '🚫 Clearance Required', 'You do not have active security clearance to operate this framework. Please contact the administrator.');
@@ -94,32 +93,48 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
 
     store.access[targetUser] = { grantedAt: now, expiresAt, durationLabel: label };
     saveStore(store);
+
+    // Send Granted DM
+    sendDM(targetUser, {
+      embeds: [{
+        color: COLOR.green,
+        title: '🟢 SUBSCRIPTION ACCESS GRANTED',
+        description: `Hello <@${targetUser}>! Your AutomateX subscription access has been activated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Duration:** ${label}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n- *AutomateX Admin Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+      }]
+    });
+
     return notice(res, COLOR.green, '✅ Clearance Granted', `Operator <@${targetUser}> has been authorized.\n**Duration:** ${label}`);
   }
 
   if (name === 'revoke-access') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
     const targetUser = data.options.find(o => o.name === 'user').value;
+    const reasonOpt = data.options.find(o => o.name === 'reason');
+    const reason = reasonOpt ? reasonOpt.value : 'Access revoked by the Administrator.';
     
-    // 1. Revoke clearance
     delete store.access[targetUser];
-    
-    // 2. Purge their security vault (Delete stored Discord tokens)
     delete store.credentials[targetUser];
 
-    // 3. Halt pipelines & destroy their configurations
     let terminated = 0;
     for (const [id, c] of Object.entries(store.configs)) {
       if (c.userId === targetUser) {
         if (c.running) stopRunner(id, store);
-        // Attempt to delete their controller card from Discord
         DiscordRequest(`channels/${c.controllerChannelId}/messages/${c.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
         delete store.configs[id];
         terminated++;
       }
     }
-
     saveStore(store);
+
+    // Send Revoked DM
+    sendDM(targetUser, {
+      embeds: [{
+        color: COLOR.red,
+        title: '🔴 SUBSCRIPTION ACCESS REVOKED',
+        description: `Hello <@${targetUser}>! Your AutomateX subscription access has been deactivated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Reason:** ${reason}\n• **Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n- *AutomateX Admin Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+      }]
+    });
+
     return notice(res, COLOR.green, '🗑️ Operator Purged', `Operator <@${targetUser}> authorization terminated.\n🛑 **${terminated} pipeline(s) destroyed and credential vault wiped.**`);
   }
 
@@ -209,11 +224,10 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     return;
   }
 
-if (name === 'stop-all') {
+  if (name === 'stop-all') {
     res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
     const stopped = stopAllRunnersForUser(guildId, user.id, store, saveStore);
     
-    // NEW: Ping Discord to visually update the controller cards to "Paused"
     for (const [id] of stopped) {
       refreshCard(id).catch(() => {});
     }
