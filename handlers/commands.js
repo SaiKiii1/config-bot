@@ -57,7 +57,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (!guildId) return ephemeral(res, '⚠️ **Context Error**: Command execution restricted to guild servers.');
 
   // --- AUTHORIZATION GATE ---
-  if (name !== 'grant-access' && name !== 'revoke-access') {
+  if (name !== 'grant-access' && name !== 'revoke-access' && name !== 'promotion') {
     const access = store.access[user.id];
     const now = Date.now();
     
@@ -70,6 +70,54 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         return notice(res, COLOR.red, '🚫 Clearance Required', 'You do not have active security clearance to operate this framework. Please contact the administrator.');
       }
     }
+  }
+
+  // --- PROMOTIONAL POST (ADMIN ONLY) ---
+  if (name === 'promotion') {
+    if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
+    
+    return res.send({
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: {
+        content: '@everyone',
+        embeds: [{
+          color: 0x5865f2, // Discord Blurple
+          title: '🚀 AUTOMATEX IS NOW LIVE 🚀',
+          description: 'Welcome to **AutomateX**!\n\nThe ultimate enterprise-grade Discord automation framework. We provide intelligent, humanized dispatch systems to keep your accounts secure and your workflow efficient.',
+          fields: [
+            {
+              name: '🛡️ ANTI-BAN TELEMETRY',
+              value: 'Humanized jitter, typing indicators, and read acknowledgments.',
+              inline: true
+            },
+            {
+              name: '⚡ SMART PRE-FLIGHT',
+              value: 'Prevents duplicate message spam to protect your account standing.',
+              inline: true
+            },
+            {
+              name: '🔐 SECURE VAULT',
+              value: 'AES-256-GCM encrypted token storage for maximum safety.',
+              inline: true
+            },
+            {
+              name: '⏱️ DYNAMIC CADENCE',
+              value: 'Fully customizable delays, controller panels, and deployment pipelines.',
+              inline: true
+            },
+            {
+              name: '📌 HOW TO GET STARTED',
+              value: '1. Contact the Administrator to purchase a subscription duration.\n2. Wait for your access clearance to be granted.\n3. Run `/add-token register` to securely vault your account.\n4. Provision your pipeline using `/add-config`.\n5. Manage your active posts in your private Command Center.',
+              inline: false
+            }
+          ],
+          footer: {
+            text: '🔒 AutomateX • Secure. Automated. Reliable.'
+          }
+          // image: { url: 'YOUR_BANNER_IMAGE_URL_HERE' }
+        }]
+      }
+    });
   }
 
   // --- ACCESS MANAGEMENT (ADMIN ONLY) ---
@@ -94,7 +142,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     store.access[targetUser] = { grantedAt: now, expiresAt, durationLabel: label };
     saveStore(store);
 
-    // Send Granted DM
     sendDM(targetUser, {
       embeds: [{
         color: COLOR.green,
@@ -126,7 +173,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     }
     saveStore(store);
 
-    // Send Revoked DM
     sendDM(targetUser, {
       embeds: [{
         color: COLOR.red,
