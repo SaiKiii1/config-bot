@@ -50,6 +50,10 @@ const commands = [
       { type: 6, name: 'user', description: 'The operator account to terminate clearance for', required: true },
       { type: 3, name: 'reason', description: 'Reason for revocation (sent to user)', required: false }
     ]
+  },
+  {
+    name: 'promotion',
+    description: '📢 (Admin) Post the official AutomateX promotional message in this channel.'
   }
 ];
 
