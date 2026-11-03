@@ -17,18 +17,18 @@ const notice = (res, color, title, description) => reply(res, { embeds: [{ color
 
 const helpEmbed = () => ({
   color: COLOR.blurple,
-  title: '🛡️ Research Security Framework — Command Center',
-  description: 'Enterprise-grade automated telemetry dispatcher utilizing user-session credential simulations.',
+  title: '🛡️ AutomateX — Command Center',
+  description: 'Enterprise-grade Discord automation framework featuring humanized dispatch and secure credential vaulting.',
   fields: [
     {
       name: '📋 Operational Workflow',
       value:
         '1️⃣ **`/add-token register`** — Register your single account token.\n' +
         '2️⃣ **`/add-config name`** — Provision an isolated configuration pipeline.\n' +
-        '3️⃣ **Controller Panel** — Execute, test, and audit payloads.',
+        '3️⃣ **Controller Panel** — Execute, test, and manage active dispatches.',
     },
   ],
-  footer: { text: 'Academic Cybersecurity Case Study Framework v2.6' },
+  footer: { text: 'AutomateX • Secure. Automated. Reliable.' },
 });
 
 export function credentialInputModal() {
