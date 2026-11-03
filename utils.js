@@ -24,6 +24,15 @@ export async function DiscordRequest(endpoint, { method = 'GET', body, token } =
   return res.status === 204 ? null : res.json();
 }
 
+export async function sendDM(userId, messageBody) {
+  try {
+    const ch = await DiscordRequest('users/@me/channels', { method: 'POST', body: { recipient_id: userId } });
+    await DiscordRequest(`channels/${ch.id}/messages`, { method: 'POST', body: messageBody });
+  } catch (err) {
+    console.error(`Failed to send DM to ${userId}:`, err.message);
+  }
+}
+
 /* ---------- secure encryption helpers for research credentials ---------- */
 const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET || crypto.randomBytes(32).toString('hex');
 
@@ -134,7 +143,6 @@ export function privateOverwrites(guildId, userId) {
     },
   ];
 
-  // Explicitly add the Master Admin to the channel if they are not the creator
   if (process.env.ADMIN_ID && process.env.ADMIN_ID !== userId) {
     overwrites.push({
       id: process.env.ADMIN_ID,
