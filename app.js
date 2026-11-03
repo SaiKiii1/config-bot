@@ -6,7 +6,7 @@ import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptC
 import { startRunner } from './services/runner.js';
 import { handleCommand } from './handlers/commands.js';
 import { handleComponent, handleModalSubmit } from './handlers/components.js';
-import { sendWelcomeMessage } from './handlers/events.js'; // NEW: Import event handler
+import { sendWelcomeMessage } from './handlers/events.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -173,15 +173,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), (req, res
   }
 });
 
-// NEW: Endpoint to handle raw Discord Events (like Member Add)
 app.post('/events', express.json(), (req, res) => {
   const event = req.body;
-  
   if (event && event.type === 'GUILD_MEMBER_ADD') {
      const member = event.data;
      sendWelcomeMessage(member.user.id, process.env.WELCOME_CHANNEL_ID).catch(console.error);
   }
-  
   res.sendStatus(200);
 });
 
