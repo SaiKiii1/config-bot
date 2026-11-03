@@ -1,6 +1,6 @@
 // handlers/commands.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
-import { DiscordRequest, slug, privateOverwrites, redactToken, sendDM } from '../utils.js';
+import { DiscordRequest, slug, privateOverwrites, redactToken, sendDM, manageRole } from '../utils.js';
 import { stopAllRunnersForUser, stopRunner } from '../services/runner.js';
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, amber: 0xfee75c, red: 0xed4245 };
@@ -142,6 +142,10 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     store.access[targetUser] = { grantedAt: now, expiresAt, durationLabel: label };
     saveStore(store);
 
+    // Swap roles: Give Subscriber, Remove Member
+    await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'PUT');
+    await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'DELETE');
+
     sendDM(targetUser, {
       embeds: [{
         color: COLOR.green,
@@ -172,6 +176,10 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       }
     }
     saveStore(store);
+
+    // Swap roles: Remove Subscriber, Give Member
+    await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE');
+    await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT');
 
     sendDM(targetUser, {
       embeds: [{
