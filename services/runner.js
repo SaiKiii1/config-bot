@@ -1,5 +1,5 @@
 // services/runner.js
-import { DiscordRequest, decryptCredential, sendDM } from '../utils.js';
+import { DiscordRequest, decryptCredential, sendDM, manageRole } from '../utils.js';
 
 const timers = new Map();
 
@@ -49,6 +49,10 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
           }
         }
         saveStore(store);
+
+        // Swap roles: Remove Subscriber, Give Member
+        await manageRole(currentConfig.guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE');
+        await manageRole(currentConfig.guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT');
 
         // Send Expiry DM
         sendDM(targetUser, {
