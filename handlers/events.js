@@ -8,7 +8,7 @@ export async function sendWelcomeMessage(userId, channelId) {
     color: 0x5865f2,
     author: {
       name: 'AutomateX STORE',
-      icon_url: 'https://media.discordapp.net/attachments/1567118338361139201/1567120185398394990/AutomateX_Orbital_A_Logo.png?ex=6aeb05e7&is=6ae9b467&hm=e27110061c7f6bdb58d5a287943f12078bcf8dc5d275c766ad3a73a1283d00a4&=&format=webp&quality=lossless&width=512&height=512' // Replace with your bot's icon URL
+      icon_url: 'https://media.discordapp.net/attachments/1567118338361139201/1567120185398394990/AutomateX_Orbital_A_Logo.png'
     },
     title: '👋 WELCOME TO AUTOMATEX STORE',
     description: `Hello <@${userId}>, glad you joined! 🌟\n\nDiscover premium digital tools, automated pipelines, and highly secure telemetry systems all in one place. Let's get you familiar with our platform before you begin.`,
