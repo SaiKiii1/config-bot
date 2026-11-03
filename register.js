@@ -28,6 +28,13 @@ const commands = [
     options: [{ type: 3, name: 'name', description: 'Pipeline reference name', required: true }]
   },
   {
+    name: 'check-access',
+    description: '🔍 (Admin) Check subscription clearance, duration, and expiration status of a user.',
+    options: [
+      { type: 6, name: 'target', description: 'The user to check access for', required: true }
+    ]
+  },
+  {
     name: 'grant-access',
     description: '🔑 (Admin) Grant a user access to the automation framework.',
     options: [
