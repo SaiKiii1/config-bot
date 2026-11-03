@@ -72,6 +72,50 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     }
   }
 
+  // --- CHECK ACCESS (ADMIN ONLY) ---
+  if (name === 'check-access') {
+    if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
+    const targetUser = data.options?.find(o => o.name === 'target')?.value;
+    const accessRecord = store.access[targetUser];
+
+    if (!accessRecord) {
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: `❌ <@${targetUser}> has **no active access** or subscription record on AutomateX.`,
+          flags: 64
+        }
+      });
+    }
+
+    const startTimestamp = Math.floor(new Date(accessRecord.grantedAt).getTime() / 1000);
+    const expireTimestamp = accessRecord.expiresAt === 'permanent' ? null : Math.floor(new Date(accessRecord.expiresAt).getTime() / 1000);
+    const isExpired = accessRecord.expiresAt !== 'permanent' && Date.now() > new Date(accessRecord.expiresAt).getTime();
+
+    const embed = {
+      color: isExpired ? COLOR.red : COLOR.green,
+      title: `🛡️ Access Status Verification`,
+      description: `Access clearance details for <@${targetUser}>`,
+      fields: [
+        { name: '📊 Status', value: isExpired ? '🔴 **Expired**' : '🟢 **Active Clearance**', inline: true },
+        { name: '⏳ Duration', value: `\`${accessRecord.durationLabel}\``, inline: true },
+        { name: '📅 Started At', value: `<t:${startTimestamp}:F> (<t:${startTimestamp}:R>)`, inline: false },
+        { name: '⏰ Expires At', value: expireTimestamp ? `<t:${expireTimestamp}:F> (<t:${expireTimestamp}:R>)` : '♾️ **Permanent / Never**', inline: false }
+      ],
+      footer: {
+        text: 'AutomateX Security & Access Management'
+      }
+    };
+
+    return res.send({
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: {
+        embeds: [embed],
+        flags: 64
+      }
+    });
+  }
+
   // --- PROMOTIONAL POST (ADMIN ONLY) ---
   if (name === 'promotion') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
@@ -114,7 +158,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
           footer: {
             text: '🔒 AutomateX • Secure. Automated. Reliable.'
           }
-          // image: { url: 'YOUR_BANNER_IMAGE_URL_HERE' }
         }]
       }
     });
@@ -150,7 +193,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       embeds: [{
         color: COLOR.green,
         title: '🟢 SUBSCRIPTION ACCESS GRANTED',
-        description: `Hello <@${targetUser}>! Your AutomateX subscription access has been activated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Duration:** ${label}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n- *AutomateX Admin Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+        description: `Hello <@${targetUser}>! Your AutomateX subscription access has been activated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Duration:** ${label}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Admin Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
       }]
     });
 
@@ -185,7 +228,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       embeds: [{
         color: COLOR.red,
         title: '🔴 SUBSCRIPTION ACCESS REVOKED',
-        description: `Hello <@${targetUser}>! Your AutomateX subscription access has been deactivated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Reason:** ${reason}\n• **Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n- *AutomateX Admin Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+        description: `Hello <@${targetUser}>! Your AutomateX subscription access has been deactivated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Reason:** ${reason}\n**Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Admin Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
       }]
     });
 
