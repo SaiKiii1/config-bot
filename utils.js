@@ -33,6 +33,16 @@ export async function sendDM(userId, messageBody) {
   }
 }
 
+// NEW: Role Management Helpers
+export async function manageRole(guildId, userId, roleId, action = 'PUT') {
+  if (!roleId) return;
+  try {
+    await DiscordRequest(`guilds/${guildId}/members/${userId}/roles/${roleId}`, { method: action });
+  } catch (err) {
+    console.error(`Failed to ${action} role ${roleId} for ${userId}:`, err.message);
+  }
+}
+
 /* ---------- secure encryption helpers for research credentials ---------- */
 const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET || crypto.randomBytes(32).toString('hex');
 
