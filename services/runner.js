@@ -1,5 +1,5 @@
 // services/runner.js
-import { DiscordRequest, decryptCredential } from '../utils.js';
+import { DiscordRequest, decryptCredential, sendDM } from '../utils.js';
 
 const timers = new Map();
 
@@ -16,16 +16,12 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
   const c = store.configs[id];
   if (!c) return;
 
-  // 1. ORGANIC JITTER ENGINE
-  // Replaces the rigid interval with a randomized recursive timeout
   const scheduleNext = (baseDelaySeconds) => {
     const currentConfig = store.configs[id];
     if (!currentConfig || !currentConfig.running) return;
 
-    // Introduce a random ±15% variance to the cadence to simulate human inconsistency
     const jitterFactor = 1 + (Math.random() * 0.3 - 0.15);
     const delayMs = Math.floor(baseDelaySeconds * 1000 * jitterFactor);
-    
     timers.set(id, setTimeout(tick, delayMs));
   };
 
@@ -33,18 +29,45 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     const currentConfig = store.configs[id];
     if (!currentConfig || !currentConfig.running) return stopRunner(id, store);
 
-    // AUTOMATIC EXPIRY KILL SWITCH
+    // AUTOMATIC EXPIRY WIPE & NOTIFICATION
     const ADMIN_ID = process.env.ADMIN_ID;
     const access = store.access[currentConfig.userId];
     const now = Date.now();
     
-    if (currentConfig.userId !== ADMIN_ID && (!access || (access.expiresAt !== 'permanent' && now > access.expiresAt))) {
-      currentConfig.running = false;
-      currentConfig.startedAt = null;
-      currentConfig.lastError = '⚠️ Access Expired: Security clearance time limit reached.';
-      saveStore(store);
-      if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
-      return stopRunner(id, store);
+    if (currentConfig.userId !== ADMIN_ID) {
+      if (access && access.expiresAt !== 'permanent' && now > access.expiresAt) {
+        // Full database purge for expired user
+        const targetUser = currentConfig.userId;
+        delete store.access[targetUser];
+        delete store.credentials[targetUser];
+        
+        for (const [cfgId, cfg] of Object.entries(store.configs)) {
+          if (cfg.userId === targetUser) {
+            if (cfg.running) stopRunner(cfgId, store);
+            DiscordRequest(`channels/${cfg.controllerChannelId}/messages/${cfg.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
+            delete store.configs[cfgId];
+          }
+        }
+        saveStore(store);
+
+        // Send Expiry DM
+        sendDM(targetUser, {
+          embeds: [{
+            color: 0xfee75c, // Amber/Yellow
+            title: '🟡 SUBSCRIPTION ACCESS EXPIRED',
+            description: `Hello <@${targetUser}>! Your AutomateX subscription access period has ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n- *AutomateX Automated Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+          }]
+        });
+        return;
+      } else if (!access) {
+        // Halt silently if access is missing but they already received a DM previously
+        currentConfig.running = false;
+        currentConfig.startedAt = null;
+        currentConfig.lastError = '⚠️ Access Denied: Security clearance not found.';
+        saveStore(store);
+        if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
+        return stopRunner(id, store);
+      }
     }
 
     const userCreds = store.credentials[currentConfig.userId];
@@ -61,8 +84,7 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     }
 
     try {
-      // 2. INTELLIGENT PRE-FLIGHT CHECK
-      // Check the channel's last message. If it matches our payload exactly, skip this cycle to avoid duplicate spam detection.
+      // PRE-FLIGHT CHECK
       try {
         const lastMsgs = await DiscordRequest(`channels/${currentConfig.channelId}/messages?limit=1`, { token: activeToken });
         if (lastMsgs && lastMsgs.length > 0 && lastMsgs[0].content === currentConfig.text) {
@@ -70,20 +92,15 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
           scheduleNext(currentConfig.delay);
           return;
         }
-      } catch (readErr) {
-        // Ignore read permission errors, proceed with dispatch
-      }
+      } catch (readErr) { }
 
-      // 3. TYPING INDICATOR SIMULATION
-      // Triggers the "User is typing..." UI state in Discord before sending
+      // TYPING INDICATOR SIMULATION
       await DiscordRequest(`channels/${currentConfig.channelId}/typing`, { method: 'POST', token: activeToken }).catch(() => {});
-
-      // 4. HUMANIZED TYPING DELAY
-      // Calculates sleep duration based on character count (~150ms per character, between 1.5 and 6 seconds)
+      
       const typingDuration = Math.min(Math.max(currentConfig.text.length * 150, 1500), 6000);
       await new Promise((resolve) => setTimeout(resolve, typingDuration));
 
-      // 5. PAYLOAD DISPATCH
+      // PAYLOAD DISPATCH
       await DiscordRequest(`channels/${currentConfig.channelId}/messages`, {
         method: 'POST',
         token: activeToken,
@@ -99,7 +116,7 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     } catch (err) {
       if (err.status === 429) {
         console.warn(`Pipeline ${id}: Rate limited (429). Applying backoff penalty...`);
-        scheduleNext(currentConfig.delay * 2); // Exponential backoff penalty
+        scheduleNext(currentConfig.delay * 2);
         return;
       }
       if (!err.status || err.status >= 500) {
