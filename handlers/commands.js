@@ -151,7 +151,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
             },
             {
               name: '📌 HOW TO GET STARTED',
-              value: '1. Contact the Administrator to purchase a subscription duration.\n2. Wait for your access clearance to be granted.\n3. Run `/add-token register` to securely vault your account.\n4. Provision your pipeline using `/add-config`.\n5. Manage your active posts in your private Command Center.',
+              value: '1. Head over to <#1567206278579621888> and click **Create ticket** to purchase access.\n2. Once your subscription is verified by our staff, your access will be granted.\n3. Run `/add-token register` to securely vault your account.\n4. Provision your pipeline using `/add-config`.\n5. Manage your active posts in your private Command Center.',
               inline: false
             }
           ],
