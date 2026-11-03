@@ -46,7 +46,10 @@ const commands = [
   {
     name: 'revoke-access',
     description: '🚫 (Admin) Revoke system access from a user.',
-    options: [{ type: 6, name: 'user', description: 'The operator account to terminate clearance for', required: true }]
+    options: [
+      { type: 6, name: 'user', description: 'The operator account to terminate clearance for', required: true },
+      { type: 3, name: 'reason', description: 'Reason for revocation (sent to user)', required: false }
+    ]
   }
 ];
 
