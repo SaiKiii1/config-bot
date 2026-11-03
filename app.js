@@ -6,6 +6,7 @@ import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptC
 import { startRunner } from './services/runner.js';
 import { handleCommand } from './handlers/commands.js';
 import { handleComponent, handleModalSubmit } from './handlers/components.js';
+import { sendWelcomeMessage } from './handlers/events.js'; // NEW: Import event handler
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,7 +16,7 @@ store.users ??= {};
 store.drafts ??= {};
 store.configs ??= {};
 store.credentials ??= {};
-store.access ??= {}; // NEW: Stores user clearance expirations
+store.access ??= {}; 
 const save = () => saveStore(store);
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, red: 0xed4245, grey: 0x4f545c };
@@ -170,6 +171,18 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), (req, res
   } else {
     res.status(400).json({ error: 'unknown interaction' });
   }
+});
+
+// NEW: Endpoint to handle raw Discord Events (like Member Add)
+app.post('/events', express.json(), (req, res) => {
+  const event = req.body;
+  
+  if (event && event.type === 'GUILD_MEMBER_ADD') {
+     const member = event.data;
+     sendWelcomeMessage(member.user.id, process.env.WELCOME_CHANNEL_ID).catch(console.error);
+  }
+  
+  res.sendStatus(200);
 });
 
 app.listen(PORT, () => {
