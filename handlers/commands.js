@@ -163,6 +163,36 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     });
   }
 
+// --- SERVER RULES EMBED (ADMIN ONLY) ---
+  if (name === 'rules') {
+    if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
+    
+    return res.send({
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: {
+        embeds: [{
+          color: 0x5865f2, // Discord Blurple
+          title: '🛡️ AUTOMATEX — SERVER RULES',
+          description: 
+            '**WELCOME TO AUTOMATEX!**\n' +
+            'Please read and follow the rules below to keep the server comfortable, safe, and orderly for everyone. By joining this server, you are deemed to have read and agreed to all applicable rules.\n\n' +
+            '**1. Respect Everyone** — Respect members and staff. Excessive toxicity, insults, racism, hate speech, or drama baiting are strictly prohibited.\n' +
+            '**2. No Sensitive Topics** — Do not discuss politics, religion, or other sensitive topics that have the potential to trigger conflicts.\n' +
+            '**3. No Spam / Promotion** — Spamming chat, excessive caps or emojis, repeated pinging, and unauthorized promotion or sharing of other server links (including via DMs) are strictly prohibited.\n' +
+            '**4. Use Official Tickets** — Transactions, inquiries, complaints, and warranty claims must be made through the support ticket channel (<#1567206278579621888>). Do not DM staff directly for support.\n' +
+            '**5. Transactions & Buyer Responsibility** — Check details and pricing before paying, attach proof of transfer, and ensure you use official payment methods. Incorrect transfers are not the administrator\'s responsibility. Buyers assume all risks associated with product usage, including account bans or platform penalties.\n' +
+            '**6. Estimates & Pricing** — Processing times are estimates and are subject to change based on the queue or technical constraints. Prices are subject to change at any time.\n' +
+            '**7. Protect Privacy** — Sharing anyone\'s personal data, accounts, emails, phone numbers, or chat screenshots without permission is strictly prohibited.\n' +
+            '**8. Staff Decisions** — Staff reserve the right to take action to maintain server comfort, and their decisions are final. Report any detrimental issues to the Owner or Admins.\n' +
+            '**9. Violations** — Violations may result in a warning, mute, kick, blacklist, or ban depending on the severity of the offense.',
+          footer: {
+            text: '🔒 AutomateX • Secure. Automated. Reliable.'
+          }
+        }]
+      }
+    });
+  }
+
   // --- ACCESS MANAGEMENT (ADMIN ONLY) ---
   if (name === 'grant-access') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
