@@ -61,7 +61,11 @@ const commands = [
   {
     name: 'promotion',
     description: '📢 (Admin) Post the official AutomateX promotional message in this channel.'
-  }
+  },
+  {
+  name: 'rules',
+  description: 'Sends the official AutomateX server rules embed (Admin Only).'
+}
 ];
 
 try {
