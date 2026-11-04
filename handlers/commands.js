@@ -233,7 +233,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
 
   // --- STANDARD COMMANDS ---
   if (name === 'add-token') {
-    const actionOption = data.options?.find((o) => o.name === 'action')?.value;
+    const actionOption = data.options?.[0]?.name;
 
     if (actionOption === 'register') {
       const existingTokens = Object.keys(store.credentials[user.id] || {});
