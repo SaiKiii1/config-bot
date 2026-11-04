@@ -235,6 +235,10 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (name === 'add-token') {
     const actionOption = data.options?.[0]?.name;
 
+    if (!actionOption) {
+      return ephemeral(res, '⚠️ **Usage Error**: Please specify a subcommand (e.g., `/add-token register`, `/add-token list`, or `/add-token remove`).');
+    }
+
     if (actionOption === 'register') {
       const existingTokens = Object.keys(store.credentials[user.id] || {});
       if (existingTokens.length >= 1) {
