@@ -2,7 +2,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { InteractionType, InteractionResponseType, verifyKeyMiddleware } from 'discord-interactions';
-import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential, checkChannelPermissions } from './utils.js';
+import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential } from './utils.js';
 import { startRunner } from './services/runner.js';
 import { handleCommand } from './handlers/commands.js';
 import { handleComponent, handleModalSubmit } from './handlers/components.js';
@@ -132,8 +132,17 @@ async function validate(field, raw, guildId, userId) {
   if (field === 'name') return raw ? { value: raw.slice(0, 50) } : { error: 'Name cannot be blank.' };
   if (field === 'channelId') {
     if (!/^\d{17,20}$/.test(raw)) return { error: 'Invalid Snowflake ID format.' };
-    const check = await checkChannelPermissions(raw);
-    if (!check.valid) return { error: check.error };
+    try {
+      const userCreds = store.credentials[userId];
+      const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
+      const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
+      if (!activeToken) return { error: 'Authentication missing. Run `/add-token register`.' };
+      
+      const ch = await DiscordRequest(`channels/${raw}`, { token: activeToken });
+      if (![0, 5].includes(ch.type)) return { error: 'Must be a text channel.' };
+    } catch {
+      return { error: 'Channel inaccessible or token lacks scope.' };
+    }
     return { value: raw };
   }
   if (field === 'text') return raw ? { value: raw } : { error: 'Payload body cannot be empty.' };

@@ -1,5 +1,5 @@
 // services/runner.js
-import { DiscordRequest, checkChannelPermissions, sendDM, manageRole } from '../utils.js';
+import { DiscordRequest, decryptCredential, sendDM, manageRole } from '../utils.js';
 
 const timers = new Map();
 
@@ -36,6 +36,7 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     
     if (currentConfig.userId !== ADMIN_ID) {
       if (access && access.expiresAt !== 'permanent' && now > access.expiresAt) {
+        // Full database purge for expired user
         const targetUser = currentConfig.userId;
         delete store.access[targetUser];
         delete store.credentials[targetUser];
@@ -49,18 +50,21 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
         }
         saveStore(store);
 
+        // Swap roles: Remove Subscriber, Give Member
         await manageRole(currentConfig.guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE');
         await manageRole(currentConfig.guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT');
 
+        // Send Expiry DM
         sendDM(targetUser, {
           embeds: [{
-            color: 0xfee75c,
+            color: 0xfee75c, // Amber/Yellow
             title: '🟡 SUBSCRIPTION ACCESS EXPIRED',
-            description: `Hello <@${targetUser}>! Your AutomateX subscription access period has ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Automated Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+            description: `Hello <@${targetUser}>! Your AutomateX subscription access period has ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n- *AutomateX Automated Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
           }]
         });
         return;
       } else if (!access) {
+        // Halt silently if access is missing but they already received a DM previously
         currentConfig.running = false;
         currentConfig.startedAt = null;
         currentConfig.lastError = '⚠️ Access Denied: Security clearance not found.';
@@ -70,22 +74,23 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       }
     }
 
-    try {
-      // PRE-FLIGHT CHANNEL ACCESSIBILITY & PERMISSION CHECK
-      const permCheck = await checkChannelPermissions(currentConfig.channelId);
-      if (!permCheck.valid) {
-        console.warn(`Pipeline ${id}: Pre-flight check failed - ${permCheck.error}`);
-        currentConfig.running = false;
-        currentConfig.startedAt = null;
-        currentConfig.lastError = `Pre-Flight Check Failed: ${permCheck.error}`;
-        saveStore(store);
-        if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
-        return stopRunner(id, store);
-      }
+    const userCreds = store.credentials[currentConfig.userId];
+    const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
+    const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
 
-      // PRE-FLIGHT CONTENT CHECK (Avoid duplicate consecutive posts if desired)
+    if (!activeToken) {
+      currentConfig.running = false;
+      currentConfig.startedAt = null;
+      currentConfig.lastError = 'Authentication Failure: No valid session token found. Execute `/add-token register` to re-authenticate.';
+      saveStore(store);
+      if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
+      return stopRunner(id, store);
+    }
+
+    try {
+      // PRE-FLIGHT CHECK
       try {
-        const lastMsgs = await DiscordRequest(`channels/${currentConfig.channelId}/messages?limit=1`);
+        const lastMsgs = await DiscordRequest(`channels/${currentConfig.channelId}/messages?limit=1`, { token: activeToken });
         if (lastMsgs && lastMsgs.length > 0 && lastMsgs[0].content === currentConfig.text) {
           console.warn(`Pipeline ${id}: Pre-flight check detected identical recent payload. Delaying to next cycle...`);
           scheduleNext(currentConfig.delay);
@@ -93,15 +98,21 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
         }
       } catch (readErr) { }
 
-      // PAYLOAD DISPATCH VIA OFFICIAL BOT TOKEN
+      // TYPING INDICATOR SIMULATION
+      await DiscordRequest(`channels/${currentConfig.channelId}/typing`, { method: 'POST', token: activeToken }).catch(() => {});
+      
+      const typingDuration = Math.min(Math.max(currentConfig.text.length * 150, 1500), 6000);
+      await new Promise((resolve) => setTimeout(resolve, typingDuration));
+
+      // PAYLOAD DISPATCH
       await DiscordRequest(`channels/${currentConfig.channelId}/messages`, {
         method: 'POST',
+        token: activeToken,
         body: { content: currentConfig.text, allowed_mentions: { parse: [] } },
       });
       
       currentConfig.sent = (currentConfig.sent ?? 0) + 1;
       currentConfig.lastSentAt = Date.now();
-      currentConfig.lastError = null;
       if (currentConfig.sent % 10 === 0) saveStore(store);
 
       scheduleNext(currentConfig.delay);
