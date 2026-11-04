@@ -18,12 +18,12 @@ const notice = (res, color, title, description) => reply(res, { embeds: [{ color
 const helpEmbed = () => ({
   color: COLOR.blurple,
   title: '🛡️ AutomateX — Command Center',
-  description: 'Enterprise-grade Discord automation framework featuring humanized dispatch and secure credential vaulting.',
+  description: 'Enterprise-grade Discord automation framework featuring officially supported bot dispatch and secure credential vaulting.',
   fields: [
     {
       name: '📋 Operational Workflow',
       value:
-        '1️⃣ **`/add-token register`** — Register your single account token.\n' +
+        '1️⃣ **`/add-token register`** — Register your bot automation credential.\n' +
         '2️⃣ **`/add-config name`** — Provision an isolated configuration pipeline.\n' +
         '3️⃣ **Controller Panel** — Execute, test, and manage active dispatches.',
     },
@@ -36,10 +36,10 @@ export function credentialInputModal() {
     type: InteractionResponseType.MODAL,
     data: {
       custom_id: 'modal:add-token:save',
-      title: '🔐 Secure Credential Registration (Limit: 1)',
+      title: '🔐 Secure Bot Credential Registration (Limit: 1)',
       components: [
-        { type: 1, components: [{ type: 4, custom_id: 'label_name', label: 'Token Profile Label', style: 1, required: true, max_length: 50, placeholder: 'e.g., My-Primary-Account' }] },
-        { type: 1, components: [{ type: 4, custom_id: 'token_value', label: 'Discord Account Session Token', style: 1, required: true, min_length: 50, max_length: 200, placeholder: 'Paste session credential (encrypted at rest)' }] }
+        { type: 1, components: [{ type: 4, custom_id: 'label_name', label: 'Bot Profile Label', style: 1, required: true, max_length: 50, placeholder: 'e.g., Primary-Bot-Instance' }] },
+        { type: 1, components: [{ type: 4, custom_id: 'token_value', label: 'Discord Bot Token', style: 1, required: true, min_length: 50, max_length: 200, placeholder: 'Paste bot token (encrypted at rest)' }] }
       ],
     },
   };
@@ -102,17 +102,12 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         { name: '📅 Started At', value: `<t:${startTimestamp}:F> (<t:${startTimestamp}:R>)`, inline: false },
         { name: '⏰ Expires At', value: expireTimestamp ? `<t:${expireTimestamp}:F> (<t:${expireTimestamp}:R>)` : '♾️ **Permanent / Never**', inline: false }
       ],
-      footer: {
-        text: 'AutomateX Security & Access Management'
-      }
+      footer: { text: 'AutomateX Security & Access Management' }
     };
 
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        embeds: [embed],
-        flags: 64
-      }
+      data: { embeds: [embed], flags: 64 }
     });
   }
 
@@ -125,45 +120,23 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       data: {
         content: '@everyone',
         embeds: [{
-          color: 0x5865f2, // Discord Blurple
+          color: 0x5865f2,
           title: '🚀 AUTOMATEX IS NOW LIVE 🚀',
-          description: 'Welcome to **AutomateX**!\n\nThe ultimate enterprise-grade Discord automation framework. We provide intelligent, humanized dispatch systems to keep your accounts secure and your workflow efficient.',
+          description: 'Welcome to **AutomateX**!\n\nThe ultimate enterprise-grade Discord automation framework. We provide intelligent, supported bot dispatch systems to keep your workflows efficient.',
           fields: [
-            {
-              name: '🛡️ ANTI-BAN TELEMETRY',
-              value: 'Humanized jitter, typing indicators, and read acknowledgments.',
-              inline: true
-            },
-            {
-              name: '⚡ SMART PRE-FLIGHT',
-              value: 'Prevents duplicate message spam to protect your account standing.',
-              inline: true
-            },
-            {
-              name: '🔐 SECURE VAULT',
-              value: 'AES-256-GCM encrypted token storage for maximum safety.',
-              inline: true
-            },
-            {
-              name: '⏱️ DYNAMIC CADENCE',
-              value: 'Fully customizable delays, controller panels, and deployment pipelines.',
-              inline: true
-            },
-            {
-              name: '📌 HOW TO GET STARTED',
-              value: '1. Head over to <#1567206278579621888> and click **Create ticket** to purchase access.\n2. Once your subscription is verified by our staff, your access will be granted.\n3. Run `/add-token register` to securely vault your account.\n4. Provision your pipeline using `/add-config`.\n5. Manage your active posts in your private Command Center.',
-              inline: false
-            }
+            { name: '🛡️ SUPPORTED API', value: 'Official bot integration compliant with Discord standards.', inline: true },
+            { name: '⚡ SMART PRE-FLIGHT', value: 'Prevents duplicate message spam to protect channel integrity.', inline: true },
+            { name: '🔐 SECURE VAULT', value: 'AES-256-GCM encrypted token storage for maximum safety.', inline: true },
+            { name: '⏱️ DYNAMIC CADENCE', value: 'Fully customizable delays, controller panels, and deployment pipelines.', inline: true },
+            { name: '📌 HOW TO GET STARTED', value: '1. Head over to support and open a ticket.\n2. Once verified, your access will be granted.\n3. Run `/add-token register` to securely vault your bot.\n4. Provision your pipeline using `/add-config`.\n5. Manage your active posts in your private Command Center.', inline: false }
           ],
-          footer: {
-            text: '🔒 AutomateX • Secure. Automated. Reliable.'
-          }
+          footer: { text: '🔒 AutomateX • Secure. Automated. Reliable.' }
         }]
       }
     });
   }
 
-// --- SERVER RULES EMBED (ADMIN ONLY) ---
+  // --- SERVER RULES EMBED (ADMIN ONLY) ---
   if (name === 'rules') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
     
@@ -171,23 +144,18 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
         embeds: [{
-          color: 0x5865f2, // Discord Blurple
+          color: 0x5865f2,
           title: '🛡️ AUTOMATEX — SERVER RULES',
           description: 
             '**WELCOME TO AUTOMATEX!**\n' +
-            'Please read and follow the rules below to keep the server comfortable, safe, and orderly for everyone. By joining this server, you are deemed to have read and agreed to all applicable rules.\n\n' +
-            '**1. Respect Everyone** — Respect members and staff. Excessive toxicity, insults, racism, hate speech, or drama baiting are strictly prohibited.\n' +
-            '**2. No Sensitive Topics** — Do not discuss politics, religion, or other sensitive topics that have the potential to trigger conflicts.\n' +
-            '**3. No Spam / Promotion** — Spamming chat, excessive caps or emojis, repeated pinging, and unauthorized promotion or sharing of other server links (including via DMs) are strictly prohibited.\n' +
-            '**4. Use Official Tickets** — Transactions, inquiries, complaints, and warranty claims must be made through the support ticket channel (<#1567206278579621888>). Do not DM staff directly for support.\n' +
-            '**5. Transactions & Buyer Responsibility** — Check details and pricing before paying, attach proof of transfer, and ensure you use official payment methods. Incorrect transfers are not the administrator\'s responsibility. Buyers assume all risks associated with product usage, including account bans or platform penalties.\n' +
-            '**6. Estimates & Pricing** — Processing times are estimates and are subject to change based on the queue or technical constraints. Prices are subject to change at any time.\n' +
-            '**7. Protect Privacy** — Sharing anyone\'s personal data, accounts, emails, phone numbers, or chat screenshots without permission is strictly prohibited.\n' +
-            '**8. Staff Decisions** — Staff reserve the right to take action to maintain server comfort, and their decisions are final. Report any detrimental issues to the Owner or Admins.\n' +
-            '**9. Violations** — Violations may result in a warning, mute, kick, blacklist, or ban depending on the severity of the offense.',
-          footer: {
-            text: '🔒 AutomateX • Secure. Automated. Reliable.'
-          }
+            'Please read and follow the rules below to keep the server comfortable, safe, and orderly for everyone.\n\n' +
+            '**1. Respect Everyone** — Respect members and staff.\n' +
+            '**2. No Sensitive Topics** — Keep discussions appropriate.\n' +
+            '**3. No Spam / Promotion** — Unauthorized advertising is prohibited.\n' +
+            '**4. Use Official Tickets** — Support inquiries must be made through tickets.\n' +
+            '**5. Transactions & Buyer Responsibility** — Check details before paying.\n' +
+            '**6. Staff Decisions** — Staff decisions are final.',
+          footer: { text: '🔒 AutomateX • Secure. Automated. Reliable.' }
         }]
       }
     });
@@ -215,7 +183,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     store.access[targetUser] = { grantedAt: now, expiresAt, durationLabel: label };
     saveStore(store);
 
-    // Swap roles: Give Subscriber, Remove Member
     await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'PUT');
     await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'DELETE');
 
@@ -223,7 +190,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       embeds: [{
         color: COLOR.green,
         title: '🟢 SUBSCRIPTION ACCESS GRANTED',
-        description: `Hello <@${targetUser}>! Your AutomateX subscription access has been activated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Duration:** ${label}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Admin Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+        description: `Hello <@${targetUser}>! Your AutomateX subscription access has been activated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Duration:** ${label}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Admin Action*`
       }]
     });
 
@@ -250,7 +217,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     }
     saveStore(store);
 
-    // Swap roles: Remove Subscriber, Give Member
     await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE');
     await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT');
 
@@ -258,7 +224,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       embeds: [{
         color: COLOR.red,
         title: '🔴 SUBSCRIPTION ACCESS REVOKED',
-        description: `Hello <@${targetUser}>! Your AutomateX subscription access has been deactivated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Reason:** ${reason}\n**Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Admin Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+        description: `Hello <@${targetUser}>! Your AutomateX subscription access has been deactivated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Reason:** ${reason}\n**Security Action:** All your bot credentials, posting configurations, and controller channels have been cleared.`
       }]
     });
 
@@ -274,7 +240,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       if (existingTokens.length >= 1) {
         return notice(
           res, COLOR.amber, '⚠️ Token Limit Reached',
-          `Your account is restricted to a maximum of **1** registered user token.\n\nCurrently registered profile: \`${existingTokens[0]}\`\n\nUse \`/add-token remove\` if you wish to purge and replace it.`
+          `Your account is restricted to a maximum of **1** registered bot credential.\n\nCurrently registered profile: \`${existingTokens[0]}\`\n\nUse \`/add-token remove\` if you wish to purge and replace it.`
         );
       }
       return res.send(credentialInputModal());
@@ -283,13 +249,13 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     if (actionOption === 'list') {
       const userCreds = Object.entries(store.credentials[user.id] || {});
       if (!userCreds.length) {
-        return notice(res, COLOR.amber, '⚠️ No Credentials Found', 'Your security profile has no registered tokens.\n\nExecute `/add-token register` to begin.');
+        return notice(res, COLOR.amber, '⚠️ No Credentials Found', 'Your security profile has no registered bot tokens.\n\nExecute `/add-token register` to begin.');
       }
       const fields = userCreds.map(([label, cred]) => ({
         name: `🏷️ Profile: ${label}`,
         value: `Registered: <t:${Math.floor(cred.createdAt / 1000)}:R>\nFingerprint: \`${cred.redacted}\``,
       }));
-      return reply(res, { embeds: [{ color: COLOR.blurple, title: '🔐 Vault: Registered Credentials (Limit 1/1)', fields }] });
+      return reply(res, { embeds: [{ color: COLOR.blurple, title: '🔐 Vault: Registered Bot Credentials (Limit 1/1)', fields }] });
     }
 
     if (actionOption === 'remove') {
@@ -368,7 +334,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (name === 'add-config') {
     const userTokens = Object.keys(store.credentials[user.id] || {});
     if (!userTokens.length) {
-      return notice(res, COLOR.red, '🚫 Authorization Blocked', 'Security policy requires a registered user credential before provisioning pipelines.\n\n👉 Run `/add-token register` first.');
+      return notice(res, COLOR.red, '🚫 Authorization Blocked', 'Security policy requires a registered bot credential before provisioning pipelines.\n\n👉 Run `/add-token register` first.');
     }
 
     const cfgName = data.options[0].value.trim().slice(0, 50);
