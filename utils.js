@@ -5,7 +5,8 @@ import crypto from 'node:crypto';
 const API = 'https://discord.com/api/v10';
 
 export async function DiscordRequest(endpoint, { method = 'GET', body, token } = {}) {
-  const authHeader = token ? (token.startsWith('Bot ') ? token : token) : `Bot ${process.env.DISCORD_TOKEN}`;
+  // Use the official bot token by default, or an explicitly provided valid token
+  const authHeader = token ? (token.startsWith('Bot ') ? token : `Bot ${token}`) : `Bot ${process.env.DISCORD_TOKEN}`;
   
   const res = await fetch(`${API}/${endpoint}`, {
     method,
@@ -33,7 +34,7 @@ export async function sendDM(userId, messageBody) {
   }
 }
 
-// NEW: Role Management Helpers
+// Role Management Helpers
 export async function manageRole(guildId, userId, roleId, action = 'PUT') {
   if (!roleId) return;
   try {
