@@ -28,6 +28,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       return ephemeral(res, '🚫 Clearance Required: Your security clearance has expired or been revoked. You cannot interact with these controls.');
     }
   }
+  // ------------------------------------
 
   if (action === 'cred' && p[0] === 'remove') {
     const label = p[1];
@@ -145,7 +146,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
       const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
       if (!activeToken) {
-        await editOriginal(token, { content: '⚠️ Bot credential missing. Register via `/add-token register`.' });
+        await editOriginal(token, { content: '⚠️ Authentication missing. Register a token via `/add-token register`.' });
         return;
       }
       await DiscordRequest(`channels/${cfg.channelId}/messages`, {
@@ -153,7 +154,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       });
       await editOriginal(token, { content: `🧪 **Test Dispatch Successful**: Payload transmitted to <#${cfg.channelId}>.` });
     } catch (err) {
-      await editOriginal(token, { content: `⚠️ **Dispatch Rejected**: Target channel lacks bot permissions or token is invalid.` }).catch(() => {});
+      await editOriginal(token, { content: `⚠️ **Dispatch Rejected**: Target channel lacks permissions or token session expired.` }).catch(() => {});
     }
     return;
   }
@@ -188,10 +189,11 @@ export async function handleModalSubmit(req, res, store, saveStore, lookup, vali
       return ephemeral(res, '🚫 Clearance Required: Your security clearance has expired or been revoked.');
     }
   }
+  // --------------------------------
 
   if (data.custom_id === 'modal:add-token:save') {
     if (Object.keys(store.credentials[user.id] || {}).length >= 1) {
-      return ephemeral(res, '⚠️ Limit exceeded: You can only register 1 bot token profile at a time.');
+      return ephemeral(res, '⚠️ Limit exceeded: You can only register 1 token profile at a time.');
     }
     const values = Object.fromEntries(data.components.flatMap((r) => r.components).map((c) => [c.custom_id, c.value ?? '']));
     const label = (values.label_name || 'default').trim();
@@ -202,7 +204,7 @@ export async function handleModalSubmit(req, res, store, saveStore, lookup, vali
       [label]: { encrypted: encryptCredential(rawToken), redacted: redactToken(rawToken), createdAt: Date.now() },
     };
     saveStore(store);
-    return ephemeral(res, `✅ **Bot Credential Secured (1/1 Limit Reached)**: Profile **${label}** encrypted at rest.`);
+    return ephemeral(res, `✅ **Credential Secured (1/1 Limit Reached)**: Profile **${label}** encrypted at rest.`);
   }
 
   const [, mode, id, field] = data.custom_id.split(':');

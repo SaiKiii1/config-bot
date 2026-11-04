@@ -4,11 +4,13 @@ import crypto from 'node:crypto';
 
 const API = 'https://discord.com/api/v10';
 
-export async function DiscordRequest(endpoint, { method = 'GET', body } = {}) {
+export async function DiscordRequest(endpoint, { method = 'GET', body, token } = {}) {
+  const authHeader = token ? (token.startsWith('Bot ') ? token : token) : `Bot ${process.env.DISCORD_TOKEN}`;
+  
   const res = await fetch(`${API}/${endpoint}`, {
     method,
     headers: {
-      Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
+      Authorization: authHeader,
       'Content-Type': 'application/json',
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -22,26 +24,6 @@ export async function DiscordRequest(endpoint, { method = 'GET', body } = {}) {
   return res.status === 204 ? null : res.json();
 }
 
-// Pre-flight channel permission validator for official bot dispatch
-export async function checkChannelPermissions(channelId) {
-  try {
-    const channel = await DiscordRequest(`channels/${channelId}`);
-    // Basic check: ensure channel object exists and is a text-based channel (type 0 or 5)
-    if (!channel || ![0, 5].includes(channel.type)) {
-      return { valid: false, error: 'Invalid channel type or channel does not exist.' };
-    }
-    return { valid: true, guildId: channel.guild_id };
-  } catch (err) {
-    if (err.status === 404) {
-      return { valid: false, error: 'Bot cannot find this channel. Ensure the bot has been invited to the server.' };
-    }
-    if (err.status === 403) {
-      return { valid: false, error: 'Bot lacks permission to access this channel.' };
-    }
-    return { valid: false, error: `Channel validation failed (${err.message})` };
-  }
-}
-
 export async function sendDM(userId, messageBody) {
   try {
     const ch = await DiscordRequest('users/@me/channels', { method: 'POST', body: { recipient_id: userId } });
@@ -51,7 +33,7 @@ export async function sendDM(userId, messageBody) {
   }
 }
 
-// Role Management Helpers
+// NEW: Role Management Helpers
 export async function manageRole(guildId, userId, roleId, action = 'PUT') {
   if (!roleId) return;
   try {
