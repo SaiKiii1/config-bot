@@ -1,3 +1,4 @@
+// handlers/commands.js (or commands.js)
 const base = { type: 1, integration_types: [0], contexts: [0] }; // server-only slash commands
 
 export const COMMANDS = [
@@ -12,6 +13,11 @@ export const COMMANDS = [
   { ...base, name: 'controller', description: 'Open (or repair) your private controller channel' },
   { ...base, name: 'stop-all', description: 'Stop all of your running configs at once' },
   { ...base, name: 'status', description: 'Check that the bot is online' },
+  {
+    ...base,
+    name: 'terms-of-service',
+    description: '(Admin) Publish the official AutomateX Terms of Service embed.',
+  },
   {
     ...base,
     name: 'add-token',
