@@ -164,16 +164,19 @@ app.get('/health', (req, res) => res.send('ok'));
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (req, res) => {
   const { type, data } = req.body;
   if (type === InteractionType.APPLICATION_COMMAND) {
-    const { name, user, member } = data;
-    const userId = user?.id || member?.user?.id;
+    const { name } = data;
+    
+    // Safely extract user ID regardless of context (Guild vs DM)
+    const userId = req.body.member?.user?.id || req.body.user?.id;
 
     // Handle /terms-of-service command directly
     if (name === 'terms-of-service') {
-      const adminId = process.env.ADMIN_ID;
-      if (userId !== adminId) {
+      console.log(`[DEBUG] /terms-of-service invoked by userId: ${userId} | Expected ADMIN_ID: ${process.env.ADMIN_ID}`);
+
+      if (!userId || userId !== process.env.ADMIN_ID) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '❌ Unauthorized: Only the administrator can publish the terms of service.', flags: 6 },
+          data: { content: `❌ Unauthorized: Your ID (${userId}) does not match the configured admin ID.`, flags: 6 },
         });
       }
 
