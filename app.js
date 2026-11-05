@@ -138,10 +138,11 @@ async function validate(field, raw, guildId, userId) {
       const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
       if (!activeToken) return { error: 'Authentication missing. Run `/add-token register`.' };
       
-      const ch = await DiscordRequest(`channels/${raw}`, { token: activeToken });
+      const ch = await DiscordRequest(`channels/${raw}`, { token: activeToken.trim() });
       if (![0, 5].includes(ch.type)) return { error: 'Must be a text channel.' };
-    } catch {
-      return { error: 'Channel inaccessible or token lacks scope.' };
+    } catch (err) {
+      console.error('Channel validation failed:', err.message);
+      return { error: `Validation failed: ${err.message.slice(0, 80)}` };
     }
     return { value: raw };
   }
@@ -160,9 +161,66 @@ const lookup = (mode, id) => (mode === 'draft' ? store.drafts[id] : store.config
 
 app.get('/health', (req, res) => res.send('ok'));
 
-app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), (req, res) => {
-  const { type } = req.body;
+app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (req, res) => {
+  const { type, data } = req.body;
   if (type === InteractionType.APPLICATION_COMMAND) {
+    const { name, user, member } = data;
+    const userId = user?.id || member?.user?.id;
+
+    // Handle /terms-of-service command directly
+    if (name === 'terms-of-service') {
+      const adminId = process.env.ADMIN_ID;
+      if (userId !== adminId) {
+        return res.send({
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Unauthorized: Only the administrator can publish the terms of service.', flags: 6 },
+        });
+      }
+
+      const targetChannelId = req.body.channel_id;
+
+      await DiscordRequest(`channels/${targetChannelId}/messages`, {
+        method: 'POST',
+        token: process.env.DISCORD_TOKEN,
+        body: {
+          embeds: [{
+            title: '⚖️ AUTOMATEX — TERMS OF SERVICE',
+            description: 'Welcome to AutomateX. By accessing, configuring, or interacting with AutomateX pipelines, automated modules, and token security vaults, you agree to abide by the following Terms of Service.',
+            color: 0x3b82f6,
+            fields: [
+              {
+                name: '1. Scope of Service & Educational Purpose',
+                value: 'AutomateX is designed and maintained strictly as an advanced automation, telemetry logging, and protocol analysis framework for research and community management.'
+              },
+              {
+                name: '2. User Account Responsibility & Security',
+                value: 'You are solely responsible for the security of your authentication tokens and credentials. Never share raw tokens with third parties.'
+              },
+              {
+                name: '3. Compliance & Platform Safety Heuristics',
+                value: 'Automators incorporate safety jitters, but operators assume full responsibility for compliance with target platform Terms of Service.'
+              },
+              {
+                name: '4. Prohibited Conduct',
+                value: 'Mass spamming, phishing, targeted harassment, or unauthorized access attempts will result in immediate termination of access.'
+              },
+              {
+                name: '5. Limitation of Liability',
+                value: 'Provided on an "as-is" basis. Developers are not liable for any platform-imposed account suspensions or token invalidations.'
+              }
+            ],
+            footer: { text: 'AutomateX • Secure. Automated. Reliable.' },
+            timestamp: new Date().toISOString()
+          }]
+        }
+      });
+
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: '✅ Successfully published the Terms of Service embed!', flags: 6 },
+      });
+    }
+
     handleCommand(req, res, store, save, mineOf, ensureController, repostCards, editOriginal, setupPanel, btn, row, refreshCard).catch(console.error);
   } else if (type === InteractionType.MESSAGE_COMPONENT) {
     handleComponent(req, res, store, save, lookup, modal, setupPanel, cardPanel, validate, parseDelay, refreshCard, editOriginal, btn, row).catch(console.error);
