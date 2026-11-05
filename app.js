@@ -180,55 +180,41 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         });
       }
 
-      const targetChannelId = req.body.channel_id;
-
-      // Respond immediately to prevent interaction timeout
-      res.send({
+      // Send the embed directly as the interaction response
+      return res.send({
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: { content: '⏳ Publishing Terms of Service embed...', flags: 6 }
+        data: {
+          embeds: [{
+            title: '⚖️ AUTOMATEX — TERMS OF SERVICE',
+            description: 'Welcome to AutomateX. By accessing, configuring, or interacting with AutomateX pipelines, automated modules, and token security vaults, you agree to abide by the following Terms of Service.',
+            color: 0x3b82f6,
+            fields: [
+              {
+                name: '1. Scope of Service & Educational Purpose',
+                value: 'AutomateX is designed and maintained strictly as an advanced automation, telemetry logging, and protocol analysis framework for research and community management.'
+              },
+              {
+                name: '2. User Account Responsibility & Security',
+                value: 'You are solely responsible for the security of your authentication tokens and credentials. Never share raw tokens with third parties.'
+              },
+              {
+                name: '3. Compliance & Platform Safety Heuristics',
+                value: 'Automators incorporate safety jitters, but operators assume full responsibility for compliance with target platform Terms of Service.'
+              },
+              {
+                name: '4. Prohibited Conduct',
+                value: 'Mass spamming, phishing, targeted harassment, or unauthorized access attempts will result in immediate termination of access.'
+              },
+              {
+                name: '5. Limitation of Liability',
+                value: 'Provided on an "as-is" basis. Developers are not liable for any platform-imposed account suspensions or token invalidations.'
+              }
+            ],
+            footer: { text: 'AutomateX • Secure. Automated. Reliable.' },
+            timestamp: new Date().toISOString()
+          }]
+        }
       });
-
-      try {
-        await DiscordRequest(`channels/${targetChannelId}/messages`, {
-          method: 'POST',
-          token: process.env.DISCORD_TOKEN,
-          body: {
-            embeds: [{
-              title: '⚖️ AUTOMATEX — TERMS OF SERVICE',
-              description: 'Welcome to AutomateX. By accessing, configuring, or interacting with AutomateX pipelines, automated modules, and token security vaults, you agree to abide by the following Terms of Service.',
-              color: 0x3b82f6,
-              fields: [
-                {
-                  name: '1. Scope of Service & Educational Purpose',
-                  value: 'AutomateX is designed and maintained strictly as an advanced automation, telemetry logging, and protocol analysis framework for research and community management.'
-                },
-                {
-                  name: '2. User Account Responsibility & Security',
-                  value: 'You are solely responsible for the security of your authentication tokens and credentials. Never share raw tokens with third parties.'
-                },
-                {
-                  name: '3. Compliance & Platform Safety Heuristics',
-                  value: 'Automators incorporate safety jitters, but operators assume full responsibility for compliance with target platform Terms of Service.'
-                },
-                {
-                  name: '4. Prohibited Conduct',
-                  value: 'Mass spamming, phishing, targeted harassment, or unauthorized access attempts will result in immediate termination of access.'
-                },
-                {
-                  name: '5. Limitation of Liability',
-                  value: 'Provided on an "as-is" basis. Developers are not liable for any platform-imposed account suspensions or token invalidations.'
-                }
-              ],
-              footer: { text: 'AutomateX • Secure. Automated. Reliable.' },
-              timestamp: new Date().toISOString()
-            }]
-          }
-        });
-      } catch (err) {
-        console.error('Failed to post Terms of Service message:', err);
-      }
-
-      return;
     }
 
     handleCommand(req, res, store, save, mineOf, ensureController, repostCards, editOriginal, setupPanel, btn, row, refreshCard).catch(console.error);
