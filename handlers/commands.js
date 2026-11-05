@@ -17,7 +17,7 @@ const notice = (res, color, title, description) => reply(res, { embeds: [{ color
 
 const helpEmbed = () => ({
   color: COLOR.blurple,
-  title: '🛡️ AutomateX — Command Center',
+  title: '🛡️ AutomateX — Command Center & Guide',
   description: 'Enterprise-grade Discord automation framework featuring humanized dispatch and secure credential vaulting.',
   fields: [
     {
@@ -26,6 +26,15 @@ const helpEmbed = () => ({
         '1️⃣ **`/add-token register`** — Register your single account token.\n' +
         '2️⃣ **`/add-config name`** — Provision an isolated configuration pipeline.\n' +
         '3️⃣ **Controller Panel** — Execute, test, and manage active dispatches.',
+    },
+    {
+      name: '🧭 Server Guide & Channels',
+      value:
+        '• <#1567854828670025748> — Review our legal policies, safety heuristics, and terms of service.\n' +
+        '• <#1567187360733601833> — Read community guidelines and core server rules.\n' +
+        '• <#1567211746953797743> — Stay updated with official system updates and announcements.\n' +
+        '• <#1567212596061540552> — A dedicated space to chat, converse, and hang out with other members.\n' +
+        '• <#1567212628386783242> — The recommended channel for executing bot and slash commands to keep things clean and organized.',
     },
   ],
   footer: { text: 'AutomateX • Secure. Automated. Reliable.' },
