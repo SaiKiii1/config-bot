@@ -3,7 +3,7 @@ import { InteractionResponseType, InteractionResponseFlags } from 'discord-inter
 import { DiscordRequest, encryptCredential, decryptCredential, redactToken } from '../utils.js';
 import { startRunner, stopRunner } from '../services/runner.js';
 
-const COLOR = { blurple: 0x5865f2, green: 0x57f287, red: 0xed4245, dark: 0x2f3136 };
+const COLOR = { blurple: 0x5865f2, green: 0x57f287, red: 0xed4245, dark: 0x2f3136, grey: 0x4f545c };
 
 const reply = (res, data) =>
   res.send({
@@ -12,8 +12,56 @@ const reply = (res, data) =>
   });
 const ephemeral = (res, content) => reply(res, { content });
 const notYours = (res) => ephemeral(res, '🛡️ **Access Denied**: This configuration no longer exists or belongs to another security profile.');
+const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+const quote = (t) => clip(t.split('\n').map((l) => `> ${l}`).join('\n'), 1024);
 
-export async function handleComponent(req, res, store, saveStore, lookup, modal, setupPanel, cardPanel, validate, parseDelay, refreshCard, editOriginal, btn, row) {
+function fmtDelay(s) {
+  const unit = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  if (s % 3600 === 0) return unit(s / 3600, 'hour');
+  if (s % 60 === 0) return unit(s / 60, 'minute');
+  return unit(s, 'second');
+}
+
+const row = (...components) => ({ type: 1, components });
+const btn = (custom_id, label, style = 2, disabled = false) => ({ type: 2, custom_id, label, style, disabled });
+
+// --- REDESIGNED SPACIOUS CARD PANEL UI ---
+function cardPanel(id, c) {
+  const status = c.running ? `🟢 **Running**` : '🔴 **Paused**';
+  return {
+    content: '',
+    embeds: [{
+      title: `📊 Task: ${c.name}`,
+      description: status + (c.lastError ? `\n\n⚠️ **Error Alert:**\n${c.lastError}` : ''),
+      color: c.lastError ? COLOR.red : c.running ? COLOR.green : COLOR.grey,
+      fields: [
+        { name: '📍 Target Channel', value: `<#${c.channelId}>`, inline: true },
+        { name: '⏱️ Interval Timer', value: `Every ${fmtDelay(c.delay)}`, inline: true },
+        { name: '📨 Total Sent', value: `\`${c.sent ?? 0}\``, inline: true },
+        { name: '💬 Message Text', value: quote(c.text) },
+      ],
+      footer: { text: 'AutomateX Control Panel • Simple & Secure' },
+      timestamp: new Date().toISOString()
+    }],
+    components: [
+      // Row 1: Start/Stop & Quick Actions (Spacious & Clean)
+      row(
+        btn(`toggle:${id}`, c.running ? '⏹️ Stop' : '▶️ Start', c.running ? 4 : 3),
+        btn(`test:${id}`, '🧪 Test Message', 2),
+        btn(`refresh:${id}`, '🔄 Refresh', 2)
+      ),
+      // Row 2: Editing & Deleting
+      row(
+        btn(`edit:${id}`, '✏️ Edit Text', 1),
+        btn(`set:cfg:${id}:channelId`, '📍 Channel', 2),
+        btn(`set:cfg:${id}:delay`, '⏱️ Change Timer', 2),
+        btn(`delete:${id}`, '🗑️ Delete', 4)
+      )
+    ],
+  };
+}
+
+export async function handleComponent(req, res, store, saveStore, lookup, modal, setupPanel, cardPanelArg, validate, parseDelay, refreshCard, editOriginal) {
   const { data, token } = req.body;
   const user = req.body.member?.user ?? req.body.user;
   const [action, ...p] = data.custom_id.split(':');
@@ -91,7 +139,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
 
       await editOriginal(token, {
         content: '',
-        embeds: [{ color: COLOR.green, title: `🚀 Pipeline “${d.name}” Initialized!`, description: `Card registered in <#${controllerId}>.` }],
+        embeds: [{ color: COLOR.green, title: `🚀 Task “${d.name}” Initialized!`, description: `Card registered in <#${controllerId}>.` }],
         components: [],
       });
       setTimeout(() => DiscordRequest(`channels/${id}`, { method: 'DELETE' }).catch(() => {}), 5000);
@@ -111,9 +159,9 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     panel.components = [
       row(
         btn(`set:cfg:${cfgId}:name`, 'Rename', 2),
-        btn(`set:cfg:${cfgId}:channelId`, 'Destination ID', 2),
-        btn(`set:cfg:${cfgId}:text`, 'Payload Text', 2),
-        btn(`set:cfg:${cfgId}:delay`, 'Cadence Timer', 2),
+        btn(`set:cfg:${cfgId}:channelId`, 'Target ID', 2),
+        btn(`set:cfg:${cfgId}:text`, 'Message Text', 2),
+        btn(`set:cfg:${cfgId}:delay`, 'Timer', 2),
         btn(`refresh:${cfgId}`, '🔙 Cancel', 4)
       )
     ];
@@ -152,7 +200,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       await DiscordRequest(`channels/${cfg.channelId}/messages`, {
         method: 'POST', token: activeToken, body: { content: cfg.text, allowed_mentions: { parse: [] } },
       });
-      await editOriginal(token, { content: `🧪 **Test Dispatch Successful**: Payload transmitted to <#${cfg.channelId}>.` });
+      await editOriginal(token, { content: `🧪 **Test Dispatch Successful**: Message transmitted to <#${cfg.channelId}>.` });
     } catch (err) {
       await editOriginal(token, { content: `⚠️ **Dispatch Rejected**: Target channel lacks permissions or token session expired.` }).catch(() => {});
     }
@@ -161,7 +209,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
 
   if (action === 'delete') {
     return reply(res, {
-      content: `🗑️ **Confirm Deletion**: Permanently destroy **${cfg.name}**?`,
+      content: `🗑️ **Confirm Deletion**: Permanently delete **${cfg.name}**?`,
       components: [row(btn(`delete_yes:${cfgId}`, 'Confirm Deletion', 4), btn('delete_no', 'Abort'))],
     });
   }
@@ -170,7 +218,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     stopRunner(cfgId, store);
     delete store.configs[cfgId];
     saveStore(store);
-    res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: { content: `🗑️ Pipeline **${cfg.name}** permanently purged.`, embeds: [], components: [] } });
+    res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: { content: `🗑️ Task **${cfg.name}** permanently purged.`, embeds: [], components: [] } });
     DiscordRequest(`channels/${cfg.controllerChannelId}/messages/${cfg.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
   }
 }
