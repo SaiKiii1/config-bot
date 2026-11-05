@@ -206,7 +206,11 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
                 value: 'Mass spamming, phishing, targeted harassment, or unauthorized access attempts will result in immediate termination of access.'
               },
               {
-                name: '5. Limitation of Liability',
+                name: '5. Platform Advisory & Account Health',
+                value: 'While AutomateX uses smart pre-flight checks and humanized jitter, running automation on platforms like Discord involves strict platform-specific policies. To protect your standing, we kindly advise using well-aged, active accounts and avoiding reckless setups so your profiles remain safe, though accounts can still face flags or suspensions if used incorrectly!'
+              },
+              {
+                name: '6. Limitation of Liability',
                 value: 'Provided on an "as-is" basis. Developers are not liable for any platform-imposed account suspensions or token invalidations.'
               }
             ],
