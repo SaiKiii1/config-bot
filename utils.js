@@ -5,14 +5,37 @@ import crypto from 'node:crypto';
 const API = 'https://discord.com/api/v10';
 
 export async function DiscordRequest(endpoint, { method = 'GET', body, token } = {}) {
+  const isUserToken = token && !token.startsWith('Bot ');
   const authHeader = token ? (token.startsWith('Bot ') ? token : token) : `Bot ${process.env.DISCORD_TOKEN}`;
   
+  // Standard headers for all requests
+  const headers = {
+    Authorization: authHeader,
+    'Content-Type': 'application/json',
+  };
+
+  // Inject client fingerprinting headers if using a personal user token
+  if (isUserToken) {
+    headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) discord/1.0.9015 Chrome/120.0.6099.291 Electron/28.2.5 Safari/537.36';
+    headers['X-Super-Properties'] = Buffer.from(
+      JSON.stringify({
+        os: 'Windows',
+        browser: 'Discord Client',
+        release_channel: 'stable',
+        client_version: '1.0.9015',
+        os_version: '10.0.19045',
+        os_arch: 'x64',
+        system_locale: 'en-US',
+      })
+    ).toString('base64');
+    headers['Sec-Fetch-Dest'] = 'empty';
+    headers['Sec-Fetch-Mode'] = 'cors';
+    headers['Sec-Fetch-Site'] = 'same-origin';
+  }
+
   const res = await fetch(`${API}/${endpoint}`, {
     method,
-    headers: {
-      Authorization: authHeader,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -33,7 +56,7 @@ export async function sendDM(userId, messageBody) {
   }
 }
 
-// NEW: Role Management Helpers
+// Role Management Helpers
 export async function manageRole(guildId, userId, roleId, action = 'PUT') {
   if (!roleId) return;
   try {
