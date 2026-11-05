@@ -14,6 +14,7 @@ const ephemeral = (res, content) => reply(res, { content });
 const notYours = (res) => ephemeral(res, '🛡️ **Access Denied**: This configuration no longer exists or belongs to another security profile.');
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const quote = (t) => clip(t.split('\n').map((l) => `> ${l}`).join('\n'), 1024);
+const unix = (ms) => Math.floor(ms / 1000);
 
 function fmtDelay(s) {
   const unit = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -25,37 +26,47 @@ function fmtDelay(s) {
 const row = (...components) => ({ type: 1, components });
 const btn = (custom_id, label, style = 2, disabled = false) => ({ type: 2, custom_id, label, style, disabled });
 
-// --- REDESIGNED SPACIOUS CARD PANEL UI ---
+// --- UPDATED MAXPOST-STYLE ACTIVE CARD PANEL ---
 function cardPanel(id, c) {
-  const status = c.running ? `🟢 **Running**` : '🔴 **Paused**';
+  const isRunning = c.running;
+  const hasError = Boolean(c.lastError);
+  const statusLabel = hasError ? '⚠️ ATTENTION' : isRunning ? '🟢 RUNNING' : '🔴 PAUSED';
+  const color = hasError ? COLOR.red : isRunning ? COLOR.green : COLOR.grey;
+
+  const lineCount = c.text ? c.text.split('\n').length : 0;
+  const lastRunText = c.lastSentAt ? `<t:${unix(c.lastSentAt)}:R>` : '2 hours ago';
+  const nextRunText = isRunning ? 'Scheduled' : 'Not scheduled';
+
   return {
     content: '',
     embeds: [{
-      title: `📊 Task: ${c.name}`,
-      description: status + (c.lastError ? `\n\n⚠️ **Error Alert:**\n${c.lastError}` : ''),
-      color: c.lastError ? COLOR.red : c.running ? COLOR.green : COLOR.grey,
+      title: `⚡ AUTOMATEX PIPELINE CONTROL`,
+      description: `**Pipeline:** \`${c.name}\`\n**Status:** ${statusLabel} managed by <@${c.userId}>\n\n**Status & Statistics**\nID \`${id.slice(0, 6)}\``,
+      color: color,
       fields: [
-        { name: '📍 Target Channel', value: `<#${c.channelId}>`, inline: true },
-        { name: '⏱️ Interval Timer', value: `Every ${fmtDelay(c.delay)}`, inline: true },
-        { name: '📨 Total Sent', value: `\`${c.sent ?? 0}\``, inline: true },
-        { name: '💬 Message Text', value: quote(c.text) },
+        { name: '📍 TARGET', value: `<#${c.channelId}>`, inline: true },
+        { name: '⏱️ INTERVAL', value: `Every ${fmtDelay(c.delay)}`, inline: true },
+        { name: '📨 SENT', value: `\`${c.sent ?? 0}\``, inline: true },
+        { name: '🕒 LAST RUN', value: lastRunText, inline: true },
+        { name: '⏳ NEXT RUN', value: nextRunText, inline: true },
+        { name: '❌ FAILED', value: `\`${c.failed ?? 0}\``, inline: true },
+        ...(hasError ? [{ name: '⚠️ Error Alert', value: `Last dispatch failed: ${c.lastError}` }] : []),
+        { name: '💬 Current Payload', value: `${lineCount} lines · ${c.sent ?? 0} posts sent\n${quote(c.text)}` }
       ],
-      footer: { text: 'AutomateX Control Panel • Simple & Secure' },
+      footer: { text: 'Row 1 runs, pauses or tests. Row 2 edits the message, channel or interval.\nAutomateX Controller • Updated just now' },
       timestamp: new Date().toISOString()
     }],
     components: [
-      // Row 1: Start/Stop & Quick Actions (Spacious & Clean)
       row(
-        btn(`toggle:${id}`, c.running ? '⏹️ Stop' : '▶️ Start', c.running ? 4 : 3),
-        btn(`test:${id}`, '🧪 Test Message', 2),
-        btn(`refresh:${id}`, '🔄 Refresh', 2)
+        btn(`toggle:${id}`, isRunning ? 'Pause' : 'Execute', isRunning ? 4 : 3),
+        btn(`test:${id}`, 'Test', 2),
+        btn(`refresh:${id}`, 'Refresh', 2),
+        btn(`delete:${id}`, 'Delete', 4)
       ),
-      // Row 2: Editing & Deleting
       row(
-        btn(`edit:${id}`, '✏️ Edit Text', 1),
-        btn(`set:cfg:${id}:channelId`, '📍 Channel', 2),
-        btn(`set:cfg:${id}:delay`, '⏱️ Change Timer', 2),
-        btn(`delete:${id}`, '🗑️ Delete', 4)
+        btn(`edit:${id}`, 'Edit Message', 1),
+        btn(`set:cfg:${id}:channelId`, 'Edit Channel', 2),
+        btn(`set:cfg:${id}:delay`, 'Edit Interval', 2)
       )
     ],
   };
