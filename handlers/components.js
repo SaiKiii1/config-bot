@@ -2,6 +2,7 @@
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
 import { DiscordRequest, encryptCredential, decryptCredential, redactToken } from '../utils.js';
 import { startRunner, stopRunner } from '../services/runner.js';
+import { getUserClient } from '../client-manager.js';
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, red: 0xed4245, dark: 0x2f3136, grey: 0x4f545c };
 
@@ -198,6 +199,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     return res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: cardPanel(cfgId, cfg) });
   }
 
+  // Look for the "if (action === 'test')" block and replace it with this:
   if (action === 'test') {
     res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
     try {
@@ -208,9 +210,12 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
         await editOriginal(token, { content: '⚠️ Authentication missing. Register a token via `/add-token register`.' });
         return;
       }
-      await DiscordRequest(`channels/${cfg.channelId}/messages`, {
-        method: 'POST', token: activeToken, body: { content: cfg.text, allowed_mentions: { parse: [] } },
-      });
+      
+      // FIX: Dispatch via the unified selfbot client rather than raw REST
+      const client = await getUserClient(user.id, activeToken);
+      const channel = await client.channels.fetch(cfg.channelId);
+      await channel.send({ content: cfg.text, allowed_mentions: { parse: [] } });
+      
       await editOriginal(token, { content: `🧪 **Test Dispatch Successful**: Message transmitted to <#${cfg.channelId}>.` });
     } catch (err) {
       await editOriginal(token, { content: `⚠️ **Dispatch Rejected**: Target channel lacks permissions or token session expired.` }).catch(() => {});
