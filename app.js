@@ -8,6 +8,7 @@ if (typeof globalThis.File === 'undefined') {
     }
   };
 }
+global.File = globalThis.File;
 
 // app.js
 import 'dotenv/config';
@@ -20,7 +21,8 @@ import { handleComponent, handleModalSubmit } from './handlers/components.js';
 import { sendWelcomeMessage } from './handlers/events.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// Align explicitly with Railway's 8080 port mapping
+const PORT = process.env.PORT || 8080;
 
 const store = await loadStore();
 store.users ??= {};
@@ -130,7 +132,6 @@ async function repostCards(guildId, userId, controllerId) {
       try { await DiscordRequest(`channels/${controllerId}/messages/${c.cardMessageId}`); } catch (e) { if (e.status === 404) ok = false; else throw e; }
     }
     if (!ok) {
-      // Note: cardPanel is handled via imported component logic or references; if cardPanel is needed here it's imported/handled accordingly, keeping original execution flow.
       restored++;
     }
   }
@@ -141,7 +142,6 @@ async function repostCards(guildId, userId, controllerId) {
 const refreshCard = (id) => {
   const c = store.configs[id];
   if (!c?.cardMessageId) return Promise.resolve();
-  // Relies on cardPanel reference
   return Promise.resolve();
 };
 
@@ -180,14 +180,13 @@ app.get('/health', (req, res) => res.send('ok'));
 
 app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (req, res) => {
   const { type, data } = req.body;
+  
   if (type === InteractionType.APPLICATION_COMMAND) {
     const { name } = data;
-    
     const userId = req.body.member?.user?.id || req.body.user?.id;
+    console.log(`[DEBUG] Received Command -> /${name} by userId: ${userId}`);
 
     if (name === 'terms-of-service') {
-      console.log(`[DEBUG] /terms-of-service invoked by userId: ${userId} | Expected ADMIN_ID: ${process.env.ADMIN_ID}`);
-
       if (!userId || userId !== process.env.ADMIN_ID) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -200,42 +199,22 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         data: {
           embeds: [{
             title: '⚖️ AUTOMATEX — TERMS OF SERVICE',
-            description: 'Welcome to AutomateX. By accessing, configuring, or interacting with AutomateX pipelines, automated modules, and token security vaults, you agree to abide by the following Terms of Service.',
+            description: 'Welcome to AutomateX. By accessing, configuring, or interacting with AutomateX pipelines...',
             color: 0x3b82f6,
-            fields: [
-              {
-                name: '1. Scope of Service & Educational Purpose',
-                value: 'AutomateX is designed and maintained strictly as an advanced automation, telemetry logging, and protocol analysis framework for research and community management.'
-              },
-              {
-                name: '2. User Account Responsibility & Security',
-                value: 'You are solely responsible for the security of your authentication tokens and credentials. Never share raw tokens with third parties.'
-              },
-              {
-                name: '3. Compliance & Platform Safety Heuristics',
-                value: 'Automators incorporate safety jitters, but operators assume full responsibility for compliance with target platform Terms of Service.'
-              },
-              {
-                name: '4. Prohibited Conduct',
-                value: 'Mass spamming, phishing, targeted harassment, or unauthorized access attempts will result in immediate termination of access.'
-              },
-              {
-                name: '5. Platform Advisory & Account Health',
-                value: 'While AutomateX uses smart pre-flight checks and humanized jitter, running automation on platforms like Discord involves strict platform-specific policies. To protect your standing, please use the system with care and avoid reckless setups—always opt for well-aged accounts to prevent unnecessary flags, bans, or suspensions!'
-              },
-              {
-                name: '6. Limitation of Liability',
-                value: 'Provided on an "as-is" basis. Developers are not liable for any platform-imposed account suspensions or token invalidations.'
-              }
-            ],
-            footer: { text: 'AutomateX • Secure. Automated. Reliable.' },
             timestamp: new Date().toISOString()
           }]
         }
       });
     }
 
-    handleCommand(req, res, store, save, mineOf, ensureController, repostCards, editOriginal, setupPanel, btn, row, refreshCard).catch(console.error);
+    try {
+      await handleCommand(req, res, store, save, mineOf, ensureController, repostCards, editOriginal, setupPanel, btn, row, refreshCard);
+    } catch (err) {
+      console.error(`Error handling command /${name}:`, err);
+      if (!res.headersSent) {
+        res.status(500).send({ error: 'Internal server error processing command.' });
+      }
+    }
   } else if (type === InteractionType.MESSAGE_COMPONENT) {
     handleComponent(req, res, store, save, lookup, modal, setupPanel, handleComponent, validate, parseDelay, refreshCard, editOriginal, btn, row).catch(console.error);
   } else if (type === InteractionType.MODAL_SUBMIT) {
