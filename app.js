@@ -17,7 +17,8 @@ import { InteractionType, InteractionResponseType, verifyKeyMiddleware } from 'd
 import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential } from './utils.js';
 import { startRunner } from './services/runner.js';
 import { handleCommand } from './handlers/commands.js';
-import { handleComponent, handleModalSubmit } from './handlers/components.js';
+// We are importing cardPanel so app.js can actually generate and refresh the UI
+import { handleComponent, handleModalSubmit, cardPanel } from './handlers/components.js';
 import { sendWelcomeMessage } from './handlers/events.js';
 
 const app = express();
@@ -124,25 +125,52 @@ async function ensureController(guildId, user) {
   return ch.id;
 }
 
+// FULLY FUNCTIONAL REPOST LOGIC
 async function repostCards(guildId, userId, controllerId) {
   let restored = 0;
   for (const [id, c] of mineOf(guildId, userId)) {
     let ok = c.controllerChannelId === controllerId && c.cardMessageId;
     if (ok) {
-      try { await DiscordRequest(`channels/${controllerId}/messages/${c.cardMessageId}`); } catch (e) { if (e.status === 404) ok = false; else throw e; }
+      try { 
+        await DiscordRequest(`channels/${controllerId}/messages/${c.cardMessageId}`); 
+      } catch (e) { 
+        if (e.status === 404) ok = false; else throw e; 
+      }
     }
+    
+    // Actually repost the visual card if it's missing!
     if (!ok) {
-      restored++;
+      c.controllerChannelId = controllerId;
+      try {
+        const msg = await DiscordRequest(`channels/${controllerId}/messages`, {
+          method: 'POST',
+          body: cardPanel(id, c)
+        });
+        c.cardMessageId = msg.id;
+        restored++;
+      } catch (err) {
+        console.error("Failed to restore card UI:", err.message);
+      }
     }
   }
   if (restored) save();
   return restored;
 }
 
-const refreshCard = (id) => {
+// FULLY FUNCTIONAL LIVE STATS REFRESHER
+const refreshCard = async (id) => {
   const c = store.configs[id];
-  if (!c?.cardMessageId) return Promise.resolve();
-  return Promise.resolve();
+  if (!c?.cardMessageId || !c?.controllerChannelId) return;
+  
+  // Actually edit the Discord message with live statistics!
+  try {
+    await DiscordRequest(`channels/${c.controllerChannelId}/messages/${c.cardMessageId}`, {
+      method: 'PATCH',
+      body: cardPanel(id, c)
+    });
+  } catch (err) {
+    console.error(`Failed to refresh telemetry card ${id}:`, err.message);
+  }
 };
 
 async function validate(field, raw, guildId, userId) {
@@ -199,8 +227,35 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
         data: {
           embeds: [{
             title: '⚖️ AUTOMATEX — TERMS OF SERVICE',
-            description: 'Welcome to AutomateX. By accessing, configuring, or interacting with AutomateX pipelines...',
+            description: 'Welcome to AutomateX. By accessing, configuring, or interacting with AutomateX pipelines, automated modules, and token security vaults, you agree to abide by the following Terms of Service.',
             color: 0x3b82f6,
+            fields: [
+              {
+                name: '1. Scope of Service & Educational Purpose',
+                value: 'AutomateX is designed and maintained strictly as an advanced automation, telemetry logging, and protocol analysis framework for research and community management.'
+              },
+              {
+                name: '2. User Account Responsibility & Security',
+                value: 'You are solely responsible for the security of your authentication tokens and credentials. Never share raw tokens with third parties.'
+              },
+              {
+                name: '3. Compliance & Platform Safety Heuristics',
+                value: 'Automators incorporate safety jitters, but operators assume full responsibility for compliance with target platform Terms of Service.'
+              },
+              {
+                name: '4. Prohibited Conduct',
+                value: 'Mass spamming, phishing, targeted harassment, or unauthorized access attempts will result in immediate termination of access.'
+              },
+              {
+                name: '5. Platform Advisory & Account Health',
+                value: 'While AutomateX uses smart pre-flight checks and humanized jitter, running automation on platforms like Discord involves strict platform-specific policies. To protect your standing, please use the system with care and avoid reckless setups—always opt for well-aged accounts to prevent unnecessary flags, bans, or suspensions!'
+              },
+              {
+                name: '6. Limitation of Liability',
+                value: 'Provided on an "as-is" basis. Developers are not liable for any platform-imposed account suspensions or token invalidations.'
+              }
+            ],
+            footer: { text: 'AutomateX • Secure. Automated. Reliable.' },
             timestamp: new Date().toISOString()
           }]
         }

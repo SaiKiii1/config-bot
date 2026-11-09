@@ -27,7 +27,7 @@ const row = (...components) => ({ type: 1, components });
 const btn = (custom_id, label, style = 2, disabled = false) => ({ type: 2, custom_id, label, style, disabled });
 
 // --- UPDATED MAXPOST-STYLE ACTIVE CARD PANEL ---
-function cardPanel(id, c) {
+export function cardPanel(id, c) {
   const isRunning = c.running;
   const hasError = Boolean(c.lastError);
   const statusLabel = hasError ? '⚠️ ATTENTION' : isRunning ? '🟢 RUNNING' : '🔴 PAUSED';
