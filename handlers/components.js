@@ -218,7 +218,8 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       
       await editOriginal(token, { content: `🧪 **Test Dispatch Successful**: Message transmitted to <#${cfg.channelId}>.` });
     } catch (err) {
-      await editOriginal(token, { content: `⚠️ **Dispatch Rejected**: Target channel lacks permissions or token session expired.` }).catch(() => {});
+      console.error('TEST ERROR:', err);
+      await editOriginal(token, { content: `⚠️ **Dispatch Rejected**: ${err.message}` }).catch(() => {});
     }
     return;
   }
