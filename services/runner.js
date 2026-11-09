@@ -1,9 +1,8 @@
 // services/runner.js
 import { DiscordRequest, decryptCredential, sendDM, manageRole } from '../utils.js';
-import { createSelfBotClient } from '../client-manager.js';
+import { getUserClient, stopUserClient } from '../client-manager.js';
 
 const timers = new Map();
-const activeClients = new Map();
 
 export function stopRunner(id, store) {
   const handle = timers.get(id);
@@ -38,6 +37,10 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     if (currentConfig.userId !== ADMIN_ID) {
       if (access && access.expiresAt !== 'permanent' && now > access.expiresAt) {
         const targetUser = currentConfig.userId;
+        
+        // FIX: Close WebSocket to prevent memory leaks for expired users
+        stopUserClient(targetUser);
+
         delete store.access[targetUser];
         delete store.credentials[targetUser];
         
@@ -85,12 +88,8 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     }
 
     try {
-      let client = activeClients.get(currentConfig.userId);
-      if (!client || !client.isReady()) {
-        client = createSelfBotClient();
-        await client.login(activeToken);
-        activeClients.set(currentConfig.userId, client);
-      }
+      // FIX: Use the unified client manager to fetch the existing WebSocket connection
+      const client = await getUserClient(currentConfig.userId, activeToken);
 
       const channel = await client.channels.fetch(currentConfig.channelId);
       if (!channel) throw new Error('Target channel inaccessible.');
