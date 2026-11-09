@@ -8,7 +8,7 @@
     "register": "node register.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "discord-interactions": "^4.1.0",
