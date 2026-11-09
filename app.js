@@ -1,9 +1,9 @@
 import { Blob } from 'node:buffer';
-if (!globalThis.File) {
+if (typeof globalThis.File === 'undefined') {
   globalThis.File = class File extends Blob {
-    constructor(chunks, filename, options = {}) {
-      super(chunks, options);
-      this.name = filename;
+    constructor(bits, name, options = {}) {
+      super(bits, options);
+      this.name = name;
       this.lastModified = options.lastModified || Date.now();
     }
   };
