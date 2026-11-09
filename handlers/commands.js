@@ -134,7 +134,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       data: {
         content: '@everyone',
         embeds: [{
-          color: 0x5865f2, // Discord Blurple
+          color: 0x5865f2,
           title: '🚀 AUTOMATEX IS NOW LIVE 🚀',
           description: 'Welcome to **AutomateX**!\n\nThe ultimate enterprise-grade Discord automation framework. We provide intelligent, humanized dispatch systems to keep your accounts secure and your workflow efficient.',
           fields: [
@@ -194,7 +194,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     store.access[targetUser] = { grantedAt: now, expiresAt, durationLabel: label };
     saveStore(store);
 
-    // Swap roles: Give Subscriber, Remove Member
     await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'PUT');
     await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'DELETE');
 
@@ -229,7 +228,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     }
     saveStore(store);
 
-    // Swap roles: Remove Subscriber, Give Member
     await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE');
     await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT');
 
@@ -350,18 +348,23 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       return notice(res, COLOR.red, '🚫 Authorization Blocked', 'Security policy requires a registered user credential before provisioning pipelines.\n\n👉 Run `/add-token register` first.');
     }
 
-    const cfgName = data.options[0].value.trim().slice(0, 50);
+    const cfgName = data.options?.[0]?.value?.trim()?.slice(0, 50);
     if (!cfgName) return ephemeral(res, '⚠️ Configuration name cannot be empty.');
 
     const saved = mineOf(guildId, user.id).length;
-    const open = Object.values(store.drafts).filter((d) => d.userId === user.id && d.guildId === guildId).length;
+    const open = Object.values(store.drafts || {}).filter((d) => d.userId === user.id && d.guildId === guildId).length;
     if (saved + open >= MAX_CONFIGS) return notice(res, COLOR.red, '⚠️ Quota Exceeded', `Maximum limit of **${MAX_CONFIGS}** configurations reached.`);
     if (open >= MAX_OPEN_SETUPS) return notice(res, COLOR.red, '⚠️ Unfinished Setups', `Please complete or cancel your ${open} pending setup channels first.`);
 
-    res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
+    console.log(`[DEBUG] Initializing /add-config for pipeline: "${cfgName}" by user: ${user.id}`);
+
     try {
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
+
       const controllerId = await ensureController(guildId, user);
       await repostCards(guildId, user.id, controllerId);
+      
+      console.log(`[DEBUG] Creating setup channel in guild ${guildId}...`);
       const setup = await DiscordRequest(`guilds/${guildId}/channels`, {
         method: 'POST',
         body: {
@@ -371,19 +374,28 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
           permission_overwrites: privateOverwrites(guildId, user.id),
         },
       });
+
       const draft = { userId: user.id, username: user.username, guildId, name: cfgName, channelId: null, text: null, delay: null, createdAt: Date.now() };
       store.drafts[setup.id] = draft;
       saveStore(store);
+
       await DiscordRequest(`channels/${setup.id}/messages`, {
         method: 'POST',
         body: { ...setupPanel(setup.id, draft), content: `<@${user.id}> Your pipeline setup environment is ready!`, allowed_mentions: { users: [user.id] } },
       });
+
+      console.log(`[DEBUG] Successfully provisioned setup channel: ${setup.id}`);
       await editOriginal(token, {
         content: '',
         embeds: [{ color: COLOR.green, title: '✅ Setup Environment Provisioned', description: `Proceed in <#${setup.id}>.\nCommand Center: <#${controllerId}>` }],
       });
     } catch (err) {
-      await editOriginal(token, { content: '', embeds: [{ color: COLOR.red, title: '⚠️ Provisioning Failed', description: 'Verify bot channel creation permissions.' }] }).catch(() => {});
+      console.error('[ERROR] Failed to execute /add-config:', err?.message || err);
+      await editOriginal(token, { 
+        content: '', 
+        embeds: [{ color: COLOR.red, title: '⚠️ Provisioning Failed', description: `Details: \`${err?.message || 'Unknown error'}\`. Verify bot channel creation permissions.` }] 
+      }).catch(() => {});
     }
+    return;
   }
 }
