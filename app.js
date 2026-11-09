@@ -1,3 +1,14 @@
+import { Blob } from 'node:buffer';
+if (!globalThis.File) {
+  globalThis.File = class File extends Blob {
+    constructor(chunks, filename, options = {}) {
+      super(chunks, options);
+      this.name = filename;
+      this.lastModified = options.lastModified || Date.now();
+    }
+  };
+}
+
 // app.js
 import 'dotenv/config';
 import express from 'express';
