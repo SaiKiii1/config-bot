@@ -1,8 +1,12 @@
 // utils.js
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import fetch from 'node-fetch'; // <-- Overrides native fetch to support proxies
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const API = 'https://discord.com/api/v10';
+const PROXY_URL = process.env.RESIDENTIAL_PROXY_URL; // <-- Fixed from URI to URL
+const proxyAgent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
 export async function DiscordRequest(endpoint, { method = 'GET', body, token } = {}) {
   const isUserToken = token && !token.startsWith('Bot ');
@@ -33,11 +37,14 @@ export async function DiscordRequest(endpoint, { method = 'GET', body, token } =
     headers['Sec-Fetch-Site'] = 'same-origin';
   }
 
-  const res = await fetch(`${API}/${endpoint}`, {
+  const fetchOptions = {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-  });
+    ...(proxyAgent ? { agent: proxyAgent } : {}), // <-- Routes outgoing traffic via residential proxy
+  };
+
+  const res = await fetch(`${API}/${endpoint}`, fetchOptions);
   if (!res.ok) {
     const text = await res.text();
     const err = new Error(`Discord ${res.status} ${method} ${endpoint}: ${text}`);
