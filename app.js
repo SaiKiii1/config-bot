@@ -13,6 +13,7 @@ global.File = globalThis.File;
 // app.js
 import 'dotenv/config';
 import express from 'express';
+import { getUserClient } from './client-manager.js';
 import { InteractionType, InteractionResponseType, verifyKeyMiddleware } from 'discord-interactions';
 import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential } from './utils.js';
 import { startRunner } from './services/runner.js';
@@ -173,8 +174,10 @@ const refreshCard = async (id) => {
   }
 };
 
+// Update the existing validate function
 async function validate(field, raw, guildId, userId) {
   if (field === 'name') return raw ? { value: raw.slice(0, 50) } : { error: 'Name cannot be blank.' };
+  
   if (field === 'channelId') {
     if (!/^\d{17,20}$/.test(raw)) return { error: 'Invalid Snowflake ID format.' };
     try {
@@ -183,14 +186,21 @@ async function validate(field, raw, guildId, userId) {
       const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
       if (!activeToken) return { error: 'Authentication missing. Run `/add-token register`.' };
       
-      const ch = await DiscordRequest(`channels/${raw}`, { token: activeToken.trim() });
-      if (![0, 5].includes(ch.type)) return { error: 'Must be a text channel.' };
+      // FIX: Use the selfbot client to validate the channel to avoid Discord 401s
+      const client = await getUserClient(userId, activeToken.trim());
+      const ch = await client.channels.fetch(raw);
+      
+      if (!ch || ![0, 5].includes(ch.type)) return { error: 'Must be a text channel.' };
     } catch (err) {
       console.error('Channel validation failed:', err.message);
+      // Clean, specific error handling based on Discord API codes
+      if (err.code === 10003) return { error: 'Channel does not exist or account lacks access.' };
+      if (err.message.includes('401')) return { error: 'Token is invalid or session flagged by Discord.' };
       return { error: `Validation failed: ${err.message.slice(0, 80)}` };
     }
     return { value: raw };
   }
+  
   if (field === 'text') return raw ? { value: raw } : { error: 'Payload body cannot be empty.' };
   return { error: 'Unknown field.' };
 }
