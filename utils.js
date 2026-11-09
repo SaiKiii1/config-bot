@@ -1,24 +1,22 @@
 // utils.js
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import fetch from 'node-fetch'; // <-- Overrides native fetch to support proxies
+import fetch from 'node-fetch';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const API = 'https://discord.com/api/v10';
-const PROXY_URL = process.env.RESIDENTIAL_PROXY_URL; // <-- Fixed from URI to URL
+const PROXY_URL = process.env.RESIDENTIAL_PROXY_URL;
 const proxyAgent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
 export async function DiscordRequest(endpoint, { method = 'GET', body, token } = {}) {
   const isUserToken = token && !token.startsWith('Bot ');
   const authHeader = token ? (token.startsWith('Bot ') ? token : token) : `Bot ${process.env.DISCORD_TOKEN}`;
   
-  // Standard headers for all requests
   const headers = {
     Authorization: authHeader,
     'Content-Type': 'application/json',
   };
 
-  // Inject client fingerprinting headers if using a personal user token
   if (isUserToken) {
     headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) discord/1.0.9015 Chrome/120.0.6099.291 Electron/28.2.5 Safari/537.36';
     headers['X-Super-Properties'] = Buffer.from(
@@ -41,7 +39,7 @@ export async function DiscordRequest(endpoint, { method = 'GET', body, token } =
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    ...(proxyAgent ? { agent: proxyAgent } : {}), // <-- Routes outgoing traffic via residential proxy
+    ...(proxyAgent ? { agent: proxyAgent } : {}),
   };
 
   const res = await fetch(`${API}/${endpoint}`, fetchOptions);
@@ -63,7 +61,6 @@ export async function sendDM(userId, messageBody) {
   }
 }
 
-// Role Management Helpers
 export async function manageRole(guildId, userId, roleId, action = 'PUT') {
   if (!roleId) return;
   try {
@@ -73,7 +70,6 @@ export async function manageRole(guildId, userId, roleId, action = 'PUT') {
   }
 }
 
-/* ---------- secure encryption helpers for research credentials ---------- */
 const ENCRYPTION_SECRET = process.env.ENCRYPTION_SECRET || crypto.randomBytes(32).toString('hex');
 
 function getEncryptionKey() {
@@ -109,7 +105,6 @@ export function redactToken(token) {
   return `${token.slice(0, 4)}...${token.slice(-4)}`;
 }
 
-/* ---------- storage ---------- */
 const DB_FILE = new URL('./data.json', import.meta.url);
 const EMPTY = () => ({ users: {}, drafts: {}, configs: {}, botIntegrations: {}, credentials: {}, access: {} });
 const SB_URL = process.env.SUPABASE_URL?.replace(/\/$/, '');
@@ -166,7 +161,6 @@ export function saveStore(store) {
 export const slug = (s) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'config';
 
-/* ---------- role-based channel permissions ---------- */
 const VIEW_CHANNEL = 1n << 10n;
 const SEND_MESSAGES = 1n << 11n;
 const READ_HISTORY = 1n << 16n;

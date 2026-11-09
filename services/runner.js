@@ -1,7 +1,9 @@
 // services/runner.js
 import { DiscordRequest, decryptCredential, sendDM, manageRole } from '../utils.js';
+import { createSelfBotClient } from '../client-manager.js';
 
 const timers = new Map();
+const activeClients = new Map();
 
 export function stopRunner(id, store) {
   const handle = timers.get(id);
@@ -29,14 +31,12 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     const currentConfig = store.configs[id];
     if (!currentConfig || !currentConfig.running) return stopRunner(id, store);
 
-    // AUTOMATIC EXPIRY WIPE & NOTIFICATION
     const ADMIN_ID = process.env.ADMIN_ID;
     const access = store.access[currentConfig.userId];
     const now = Date.now();
     
     if (currentConfig.userId !== ADMIN_ID) {
       if (access && access.expiresAt !== 'permanent' && now > access.expiresAt) {
-        // Full database purge for expired user
         const targetUser = currentConfig.userId;
         delete store.access[targetUser];
         delete store.credentials[targetUser];
@@ -50,21 +50,18 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
         }
         saveStore(store);
 
-        // Swap roles: Remove Subscriber, Give Member
         await manageRole(currentConfig.guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE');
         await manageRole(currentConfig.guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT');
 
-        // Send Expiry DM
         sendDM(targetUser, {
           embeds: [{
-            color: 0xfee75c, // Amber/Yellow
+            color: 0xfee75c,
             title: '🟡 SUBSCRIPTION ACCESS EXPIRED',
-            description: `Hello <@${targetUser}>! Your AutomateX subscription access period has ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n- *AutomateX Automated Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+            description: `Hello <@${targetUser}>! Your AutomateX subscription access period has ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Automated Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
           }]
         });
         return;
       } else if (!access) {
-        // Halt silently if access is missing but they already received a DM previously
         currentConfig.running = false;
         currentConfig.startedAt = null;
         currentConfig.lastError = '⚠️ Access Denied: Security clearance not found.';
@@ -88,28 +85,21 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     }
 
     try {
-      // PRE-FLIGHT CHECK
-      try {
-        const lastMsgs = await DiscordRequest(`channels/${currentConfig.channelId}/messages?limit=1`, { token: activeToken });
-        if (lastMsgs && lastMsgs.length > 0 && lastMsgs[0].content === currentConfig.text) {
-          console.warn(`Pipeline ${id}: Pre-flight check detected identical recent payload. Delaying to next cycle...`);
-          scheduleNext(currentConfig.delay);
-          return;
-        }
-      } catch (readErr) { }
+      let client = activeClients.get(currentConfig.userId);
+      if (!client || !client.isReady()) {
+        client = createSelfBotClient();
+        await client.login(activeToken);
+        activeClients.set(currentConfig.userId, client);
+      }
 
-      // TYPING INDICATOR SIMULATION
-      await DiscordRequest(`channels/${currentConfig.channelId}/typing`, { method: 'POST', token: activeToken }).catch(() => {});
-      
+      const channel = await client.channels.fetch(currentConfig.channelId);
+      if (!channel) throw new Error('Target channel inaccessible.');
+
+      await channel.sendTyping().catch(() => {});
       const typingDuration = Math.min(Math.max(currentConfig.text.length * 150, 1500), 6000);
       await new Promise((resolve) => setTimeout(resolve, typingDuration));
 
-      // PAYLOAD DISPATCH
-      await DiscordRequest(`channels/${currentConfig.channelId}/messages`, {
-        method: 'POST',
-        token: activeToken,
-        body: { content: currentConfig.text, allowed_mentions: { parse: [] } },
-      });
+      await channel.send({ content: currentConfig.text, allowed_mentions: { parse: [] } });
       
       currentConfig.sent = (currentConfig.sent ?? 0) + 1;
       currentConfig.lastSentAt = Date.now();
