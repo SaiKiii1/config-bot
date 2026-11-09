@@ -35,21 +35,34 @@ export async function DiscordRequest(endpoint, { method = 'GET', body, token } =
     headers['Sec-Fetch-Site'] = 'same-origin';
   }
 
+  // Prevent infinite network hangs with a strict 10s timeout
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
   const fetchOptions = {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    ...(proxyAgent ? { agent: proxyAgent } : {}),
+    // CRITICAL FIX: Only route user/selfbot tokens through the proxy. Bot API skips proxy for instant execution.
+    ...(isUserToken && proxyAgent ? { agent: proxyAgent } : {}),
+    signal: controller.signal
   };
 
-  const res = await fetch(`${API}/${endpoint}`, fetchOptions);
-  if (!res.ok) {
-    const text = await res.text();
-    const err = new Error(`Discord ${res.status} ${method} ${endpoint}: ${text}`);
-    err.status = res.status;
+  try {
+    const res = await fetch(`${API}/${endpoint}`, fetchOptions);
+    clearTimeout(timeout);
+    
+    if (!res.ok) {
+      const text = await res.text();
+      const err = new Error(`Discord ${res.status} ${method} ${endpoint}: ${text}`);
+      err.status = res.status;
+      throw err;
+    }
+    return res.status === 204 ? null : res.json();
+  } catch (err) {
+    clearTimeout(timeout);
     throw err;
   }
-  return res.status === 204 ? null : res.json();
 }
 
 export async function sendDM(userId, messageBody) {
