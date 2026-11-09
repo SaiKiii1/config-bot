@@ -190,7 +190,7 @@ async function validate(field, raw, guildId, userId) {
       const client = await getUserClient(userId, activeToken.trim());
       const ch = await client.channels.fetch(raw);
       
-      if (!ch || ![0, 5].includes(ch.type)) return { error: 'Must be a text channel.' };
+      if (!ch || !['GUILD_TEXT', 'GUILD_NEWS'].includes(ch.type)) return { error: 'Must be a text channel.' };
     } catch (err) {
       console.error('Channel validation failed:', err.message);
       // Clean, specific error handling based on Discord API codes
