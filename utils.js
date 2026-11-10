@@ -8,7 +8,7 @@ const API = 'https://discord.com/api/v10';
 const PROXY_URL = process.env.RESIDENTIAL_PROXY_URL;
 const proxyAgent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : null;
 
-export async function DiscordRequest(endpoint, { method = 'GET', body, token } = {}) {
+export async function DiscordRequest(endpoint, { method = 'GET', body, token } = {}, retries = 3) {
   const isUserToken = token && !token.startsWith('Bot ');
   const authHeader = token ? (token.startsWith('Bot ') ? token : token) : `Bot ${process.env.DISCORD_TOKEN}`;
   
@@ -35,7 +35,6 @@ export async function DiscordRequest(endpoint, { method = 'GET', body, token } =
     headers['Sec-Fetch-Site'] = 'same-origin';
   }
 
-  // Prevent infinite network hangs with a strict 10s timeout
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
 
@@ -43,7 +42,6 @@ export async function DiscordRequest(endpoint, { method = 'GET', body, token } =
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    // CRITICAL FIX: Only route user/selfbot tokens through the proxy. Bot API skips proxy for instant execution.
     ...(isUserToken && proxyAgent ? { agent: proxyAgent } : {}),
     signal: controller.signal
   };
@@ -52,6 +50,15 @@ export async function DiscordRequest(endpoint, { method = 'GET', body, token } =
     const res = await fetch(`${API}/${endpoint}`, fetchOptions);
     clearTimeout(timeout);
     
+    // Automatically retry if Discord rate-limits the request
+    if (res.status === 429 && retries > 0) {
+      const data = await res.json().catch(() => ({}));
+      const retryAfterMs = Math.ceil((data.retry_after || 1) * 1000);
+      console.warn(`[API Rate Limit] ${endpoint} hit 429. Retrying in ${retryAfterMs}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+      return DiscordRequest(endpoint, { method, body, token }, retries - 1);
+    }
+
     if (!res.ok) {
       const text = await res.text();
       const err = new Error(`Discord ${res.status} ${method} ${endpoint}: ${text}`);
