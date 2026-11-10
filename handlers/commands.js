@@ -66,7 +66,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (!guildId) return ephemeral(res, '⚠️ **Context Error**: Command execution restricted to guild servers.');
 
   // --- AUTHORIZATION GATE ---
-  if (name !== 'grant-access' && name !== 'revoke-access' && name !== 'promotion') {
+  if (name !== 'grant-access' && name !== 'revoke-access' && name !== 'promotion' && name !== 'store') {
     const access = store.access[user.id];
     const now = Date.now();
     
@@ -79,6 +79,72 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         return notice(res, COLOR.red, '🚫 Clearance Required', 'You do not have active security clearance to operate this framework. Please contact the administrator.');
       }
     }
+  }
+
+  // --- STORE DISPLAY COMMAND (ADMIN ONLY) ---
+  if (name === 'store') {
+    if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
+
+    return res.send({
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: {
+        embeds: [{
+          color: 0x5865f2,
+          title: '⚡ AUTOMATEX — 24/7 AUTOMATED DISCORD AUTO-POST SERVICE',
+          description: 'Boost your server reach, traffic, and sales automatically 24/7 non-stop across targeted Discord channels!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+          fields: [
+            {
+              name: '💎 OFFICIAL LICENSE PRICING',
+              value: 
+                '• 🥉 **3 Days Pass:** *(1 Discord Account Slot • Config Pipelines)*\n' +
+                '• 🥈 **7 Days Pass:** *(1 Discord Account Slot • Config Pipelines)*\n' +
+                '• 🥇 **Lifetime Pass:** *(1 Discord Account Slot • Config Pipelines)*',
+              inline: false
+            },
+            {
+              name: '💳 INTERNATIONAL PAYMENT METHODS',
+              value: 
+                '• 🅿️ **PayPal**\n' +
+                '• 💸 **Wise**\n\n' +
+                '📌 *Please open a ticket directly to complete your payment and request instant authorization.*',
+              inline: false
+            },
+            {
+              name: '⚡ INSTANT ACTIVATION',
+              value: 'Licenses are manually reviewed and activated immediately upon ticket verification!',
+              inline: false
+            }
+          ],
+          footer: { text: 'AutomateX Store • Official Licensing & Pricing' },
+          timestamp: new Date().toISOString()
+        }],
+        components: [
+          {
+            type: 1,
+            components: [
+              {
+                type: 3,
+                custom_id: 'store_select_package',
+                placeholder: '💳 Click here to view package details...',
+                options: [
+                  { label: 'Paket 3 Hari (3 Days Pass)', value: 'pkg_3d', description: '3 Days Access • 1 Account Slot', emoji: { name: '🥉' } },
+                  { label: 'Paket 7 Hari (7 Days Pass)', value: 'pkg_7d', description: '7 Days Access • 1 Account Slot', emoji: { name: '🥈' } },
+                  { label: 'Paket Lifetime (Lifetime Pass)', value: 'pkg_lifetime', description: 'Permanent Access • 1 Account Slot', emoji: { name: '👑' } }
+                ]
+              }
+            ]
+          },
+          {
+            type: 1,
+            components: [
+              { type: 2, custom_id: 'store_free_trial', label: '🎁 Free Trial (24h)', style: 3 },
+              { type: 2, custom_id: 'store_guide', label: '📖 Guide (EN)', style: 2 },
+              { type: 2, custom_id: 'store_features', label: '⚡ Core Features', style: 2 }
+            ]
+          }
+        ]
+      }
+    });
   }
 
   // --- CHECK ACCESS (ADMIN ONLY) ---
@@ -359,13 +425,11 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     console.log(`[DEBUG] Initializing /add-config for pipeline: "${cfgName}" by user: ${user.id}`);
 
     try {
-      // FIX #1: Defer immediately before creating controller channels or firing network requests
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
 
       const controllerId = await ensureController(guildId, user);
       await repostCards(guildId, user.id, controllerId);
       
-      // FIX #2: Append a random 4-character suffix to bypass channel name rate limits
       const randSuffix = Math.random().toString(36).substring(2, 6);
       const setupChannelName = `setup-${slug(cfgName)}-${randSuffix}`;
 
