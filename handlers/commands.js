@@ -359,16 +359,21 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     console.log(`[DEBUG] Initializing /add-config for pipeline: "${cfgName}" by user: ${user.id}`);
 
     try {
+      // FIX #1: Defer immediately before creating controller channels or firing network requests
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
 
       const controllerId = await ensureController(guildId, user);
       await repostCards(guildId, user.id, controllerId);
       
-      console.log(`[DEBUG] Creating setup channel in guild ${guildId}...`);
+      // FIX #2: Append a random 4-character suffix to bypass channel name rate limits
+      const randSuffix = Math.random().toString(36).substring(2, 6);
+      const setupChannelName = `setup-${slug(cfgName)}-${randSuffix}`;
+
+      console.log(`[DEBUG] Creating setup channel "${setupChannelName}" in guild ${guildId}...`);
       const setup = await DiscordRequest(`guilds/${guildId}/channels`, {
         method: 'POST',
         body: {
-          name: `setup-${slug(cfgName)}`,
+          name: setupChannelName,
           type: 0,
           topic: '🔒 Secured setup channel. Automatically purges upon initialization.',
           permission_overwrites: privateOverwrites(guildId, user.id),
