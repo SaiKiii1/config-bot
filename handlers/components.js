@@ -1,6 +1,6 @@
 // handlers/components.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
-import { DiscordRequest, encryptCredential, decryptCredential, redactToken } from '../utils.js';
+import { DiscordRequest, encryptCredential, decryptCredential, redactToken, manageRole } from '../utils.js';
 import { startRunner, stopRunner } from '../services/runner.js';
 import { getUserClient } from '../client-manager.js';
 
@@ -76,6 +76,112 @@ export function cardPanel(id, c) {
 export async function handleComponent(req, res, store, saveStore, lookup, modal, setupPanel, cardPanelArg, validate, parseDelay, refreshCard, editOriginal) {
   const { data, token } = req.body;
   const user = req.body.member?.user ?? req.body.user;
+
+  // --- STORE FRONT COMPONENT INTERACTIONS ---
+  if (data.custom_id === 'store_free_trial') {
+    store.trials ??= {};
+
+    // 1. Check if user already claimed trial
+    if (store.trials[user.id]) {
+      return reply(res, {
+        content: '⚠️ **Free Trial Already Claimed**: You have already claimed your one-time 24-hour free trial for this account.\n\nIf you would like to continue using the AutomateX auto-post service, please purchase access by opening a ticket in the support channel!'
+      });
+    }
+
+    // 2. Check if user already has an active clearance duration
+    if (store.access[user.id]) {
+      return reply(res, {
+        content: `ℹ️ **Active Access Detected**: You already have active security clearance (\`${store.access[user.id].durationLabel}\`). You do not need a free trial right now!`
+      });
+    }
+
+    // 3. Grant 24-Hour Free Trial
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    const expiresAt = now + DAY;
+
+    store.trials[user.id] = { claimedAt: now };
+    store.access[user.id] = {
+      grantedAt: now,
+      expiresAt,
+      durationLabel: '24 Hours (Free Trial)'
+    };
+    saveStore(store);
+
+    // Assign subscriber role and remove member role if executed inside a guild
+    if (req.body.guild_id) {
+      await manageRole(req.body.guild_id, user.id, process.env.SUBSCRIBER_ROLE_ID, 'PUT').catch(() => {});
+      await manageRole(req.body.guild_id, user.id, process.env.MEMBER_ROLE_ID, 'DELETE').catch(() => {});
+    }
+
+    return reply(res, {
+      embeds: [{
+        color: COLOR.green,
+        title: '🎉 24-HOUR FREE TRIAL ACTIVATED!',
+        description: `Congratulations <@${user.id}>! Your one-time 24-hour free trial has been successfully claimed.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        fields: [
+          {
+            name: '⏰ Access Expiration',
+            value: `<t:${Math.floor(expiresAt / 1000)}:F> (<t:${Math.floor(expiresAt / 1000)}:R>)`,
+            inline: false
+          },
+          {
+            name: '🚀 NEXT STEPS & SETUP GUIDE',
+            value: 
+              '1️⃣ **Register Credential:** Run `/add-token register` to securely vault your account session token.\n' +
+              '2️⃣ **Provision Pipeline:** Run `/add-config name:MyFirstPost` to open your private setup workspace.\n' +
+              '3️⃣ **Command Center:** Control dispatches and view live metrics in your private controller channel.\n\n' +
+              '📌 *Need assistance? Visit <#1567854828670025748> for rules & policies or open a ticket to contact staff.*',
+            inline: false
+          }
+        ],
+        footer: { text: 'AutomateX • 1-Time Free Trial System' },
+        timestamp: new Date().toISOString()
+      }]
+    });
+  }
+
+  if (data.custom_id === 'store_select_package') {
+    const selected = data.values?.[0];
+    const packageDetails = {
+      pkg_3d: '🥉 **3 Days Pass**\n• Duration: 3 Days\n• Includes: 1 Account Token Slot + Automated Telemetry.\n👉 *Open a ticket to purchase via PayPal or Wise!*',
+      pkg_7d: '🥈 **7 Days Pass**\n• Duration: 7 Days\n• Includes: 1 Account Token Slot + Automated Telemetry.\n👉 *Open a ticket to purchase via PayPal or Wise!*',
+      pkg_lifetime: '👑 **Lifetime Pass**\n• Duration: Permanent / Lifetime\n• Includes: 1 Account Token Slot + Priority Support.\n👉 *Open a ticket to purchase via PayPal or Wise!*'
+    };
+
+    return reply(res, { content: packageDetails[selected] || '⚠️ Package details unavailable.' });
+  }
+
+  if (data.custom_id === 'store_guide') {
+    return reply(res, {
+      embeds: [{
+        color: COLOR.blurple,
+        title: '📖 Complete Step-by-Step Guide — AutomateX',
+        fields: [
+          { name: '📌 STEP 1: Register Token', value: 'Run `/add-token register` in your server and input your encrypted account session token.' },
+          { name: '📌 STEP 2: Provision Pipeline', value: 'Run `/add-config name:MY_PIPELINE` to generate a setup workspace.' },
+          { name: '📌 STEP 3: Configure Parameters', value: 'Set destination channel ID, dispatch text message, and execution interval.' },
+          { name: '📌 STEP 4: Launch Controller', value: 'Execute the pipeline from your private Command Center channel!' }
+        ]
+      }]
+    });
+  }
+
+  if (data.custom_id === 'store_features') {
+    return reply(res, {
+      embeds: [{
+        color: COLOR.green,
+        title: '⚡ AutomateX — Core Features & Advantages',
+        fields: [
+          { name: '1. Serverless & Cloud Hosted 24/7', value: 'Runs on high-availability cloud infrastructure without requiring your PC to stay on.' },
+          { name: '2. Hardware Encryption (AES-256-GCM)', value: 'Your Discord account tokens are encrypted at rest with isolated keys.' },
+          { name: '3. Humanized Anti-Ban Telemetry', value: 'Features typing indicators, read acknowledgments, and organic jitter algorithms.' },
+          { name: '4. Dedicated Proxy IP Pools', value: 'Isolated connection tunnels per user to preserve account safety.' }
+        ]
+      }]
+    });
+  }
+
   const [action, ...p] = data.custom_id.split(':');
 
   // --- COMPONENT AUTHORIZATION GATE ---
@@ -199,7 +305,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     return res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: cardPanel(cfgId, cfg) });
   }
 
-  // Look for the "if (action === 'test')" block and replace it with this:
   if (action === 'test') {
     res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
     try {
@@ -211,7 +316,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
         return;
       }
       
-      // FIX: Dispatch via the unified selfbot client rather than raw REST
       const client = await getUserClient(user.id, activeToken);
       const channel = await client.channels.fetch(cfg.channelId);
       await channel.send({ content: cfg.text, allowed_mentions: { parse: [] } });
