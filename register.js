@@ -65,6 +65,10 @@ const commands = [
   {
     name: 'terms-of-service',
     description: '⚖️ (Admin) Publish the official AutomateX Terms of Service embed.'
+  },
+  {
+    name: 'store',
+    description: '📢 (Admin) Publish the official AutomateX Store & Pricing showcase embed.'
   }
 ];
 
