@@ -114,16 +114,19 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
             {
               name: '💎 OFFICIAL LICENSE PRICING',
               value: 
-                '• 🥉 **3 Days Pass:** *(1 Account Slot • 10 Config Pipelines)*\n' +
-                '• 🥈 **7 Days Pass:** *(1 Account Slot • 25 Config Pipelines)*\n' +
-                '• 🥇 **Lifetime Pass:** *(1 Account Slot • Unlimited Configs)*',
+                '• 🎁 **24 Hours Free Trial:** ₱0 (~$0.00 USD) · FREE *(1-Time Claim • 5 Config Pipelines)*\n' +
+                '• 🥉 **3 Days Pass:** ₱75 (~$1.30 USD) · 30 Diamond Locks *(1 Account Slot • 10 Config Pipelines)*\n' +
+                '• 🥈 **7 Days Pass:** ₱150 (~$2.60 USD) · 50 Diamond Locks *(1 Account Slot • 25 Config Pipelines)*\n' +
+                '• 🥇 **Lifetime Pass:** ₱300 (~$5.20 USD) · 100 Diamond Locks *(1 Account Slot • Unlimited Configs)*',
               inline: false
             },
             {
-              name: '💳 INTERNATIONAL PAYMENT METHODS',
+              name: '💳 ACCEPTED PAYMENT METHODS',
               value: 
+                '• 🇵🇭 **GCash / Maya / Local E-Wallets**\n' +
                 '• 🅿️ **PayPal**\n' +
-                '• 💸 **Wise**\n\n' +
+                '• 💸 **Wise**\n' +
+                '• 💎 **Growtopia Diamond Locks (DLs)**\n\n' +
                 '📌 *Please open a ticket directly to complete your payment and request instant authorization.*',
               inline: false
             },
@@ -145,9 +148,9 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
                 custom_id: 'store_select_package',
                 placeholder: '💳 Click here to view package details...',
                 options: [
-                  { label: 'Paket 3 Hari (3 Days Pass)', value: 'pkg_3d', description: '3 Days Access • 10 Config Slots', emoji: { name: '🥉' } },
-                  { label: 'Paket 7 Hari (7 Days Pass)', value: 'pkg_7d', description: '7 Days Access • 25 Config Slots', emoji: { name: '🥈' } },
-                  { label: 'Paket Lifetime (Lifetime Pass)', value: 'pkg_lifetime', description: 'Permanent Access • Unlimited Configs', emoji: { name: '👑' } }
+                  { label: 'Paket 3 Hari (3 Days Pass)', value: 'pkg_3d', description: '₱75 (~$1.30 USD) / 30 DLs • 10 Config Slots', emoji: { name: '🥉' } },
+                  { label: 'Paket 7 Hari (7 Days Pass)', value: 'pkg_7d', description: '₱150 (~$2.60 USD) / 50 DLs • 25 Config Slots', emoji: { name: '🥈' } },
+                  { label: 'Paket Lifetime (Lifetime Pass)', value: 'pkg_lifetime', description: '₱300 (~$5.20 USD) / 100 DLs • Unlimited Configs', emoji: { name: '👑' } }
                 ]
               }
             ]
