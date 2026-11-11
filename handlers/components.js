@@ -81,21 +81,18 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
   if (data.custom_id === 'store_free_trial') {
     store.trials ??= {};
 
-    // 1. Check if user already claimed trial
     if (store.trials[user.id]) {
       return reply(res, {
         content: '⚠️ **Free Trial Already Claimed**: You have already claimed your one-time 24-hour free trial for this account.\n\nIf you would like to continue using the AutomateX auto-post service, please purchase access by opening a ticket in the support channel!'
       });
     }
 
-    // 2. Check if user already has an active clearance duration
     if (store.access[user.id]) {
       return reply(res, {
         content: `ℹ️ **Active Access Detected**: You already have active security clearance (\`${store.access[user.id].durationLabel}\`). You do not need a free trial right now!`
       });
     }
 
-    // 3. Grant 24-Hour Free Trial
     const now = Date.now();
     const DAY = 24 * 60 * 60 * 1000;
     const expiresAt = now + DAY;
@@ -108,7 +105,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     };
     saveStore(store);
 
-    // Assign subscriber role and remove member role if executed inside a guild
     if (req.body.guild_id) {
       await manageRole(req.body.guild_id, user.id, process.env.SUBSCRIBER_ROLE_ID, 'PUT').catch(() => {});
       await manageRole(req.body.guild_id, user.id, process.env.MEMBER_ROLE_ID, 'DELETE').catch(() => {});
@@ -144,9 +140,9 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
   if (data.custom_id === 'store_select_package') {
     const selected = data.values?.[0];
     const packageDetails = {
-      pkg_3d: '🥉 **3 Days Pass**\n• Duration: 3 Days\n• Includes: 1 Account Token Slot + Automated Telemetry.\n👉 *Open a ticket to purchase via PayPal or Wise!*',
-      pkg_7d: '🥈 **7 Days Pass**\n• Duration: 7 Days\n• Includes: 1 Account Token Slot + Automated Telemetry.\n👉 *Open a ticket to purchase via PayPal or Wise!*',
-      pkg_lifetime: '👑 **Lifetime Pass**\n• Duration: Permanent / Lifetime\n• Includes: 1 Account Token Slot + Priority Support.\n👉 *Open a ticket to purchase via PayPal or Wise!*'
+      pkg_3d: '🥉 **3 Days Pass**\n• Price: **₱75** (~$1.30 USD) or **30 Diamond Locks**\n• Duration: 3 Days\n• Includes: 1 Account Token Slot + 10 Config Pipelines.\n👉 *Open a ticket to purchase via GCash, PayPal, Wise, or Diamond Locks!*',
+      pkg_7d: '🥈 **7 Days Pass**\n• Price: **₱150** (~$2.60 USD) or **50 Diamond Locks**\n• Duration: 7 Days\n• Includes: 1 Account Token Slot + 25 Config Pipelines.\n👉 *Open a ticket to purchase via GCash, PayPal, Wise, or Diamond Locks!*',
+      pkg_lifetime: '👑 **Lifetime Pass**\n• Price: **₱300** (~$5.20 USD) or **100 Diamond Locks**\n• Duration: Permanent / Lifetime\n• Includes: 1 Account Token Slot + Unlimited Config Pipelines + Priority Support.\n👉 *Open a ticket to purchase via GCash, PayPal, Wise, or Diamond Locks!*'
     };
 
     return reply(res, { content: packageDetails[selected] || '⚠️ Package details unavailable.' });
@@ -176,7 +172,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           { name: '1. Serverless & Cloud Hosted 24/7', value: 'Runs on high-availability cloud infrastructure without requiring your PC to stay on.' },
           { name: '2. Hardware Encryption (AES-256-GCM)', value: 'Your Discord account tokens are encrypted at rest with isolated keys.' },
           { name: '3. Humanized Anti-Ban Telemetry', value: 'Features typing indicators, read acknowledgments, and organic jitter algorithms.' },
-          { name: '4. Dedicated Proxy IP Pools', value: 'Isolated connection tunnels per user to preserve account safety.' }
+          { name: '4. Dedicated Sticky Residential Proxy Pools', value: 'Isolated connection tunnels per user to preserve account safety.' }
         ]
       }]
     });
