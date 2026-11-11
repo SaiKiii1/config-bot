@@ -407,7 +407,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (name === 'controller') {
     res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
     try {
-      const controllerId = await ensureController(guildId, user);
+      const controllerId = await ensureController(guildId, user, store, saveStore);
       const restored = await repostCards(guildId, user.id, controllerId);
       await editOriginal(token, {
         content: `📂 **Command Center Established**: <#${controllerId}>` + (restored ? `\n🔧 *Restored ${restored} missing telemetry card(s).*` : ''),
@@ -441,7 +441,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     const cfgName = data.options?.[0]?.value?.trim()?.slice(0, 50);
     if (!cfgName) return ephemeral(res, '⚠️ Configuration name cannot be empty.');
 
-    // Dynamic Tier Quota Evaluation
     const maxConfigs = getMaxConfigs(user.id, store);
     const saved = mineOf(guildId, user.id).length;
     const open = Object.values(store.drafts || {}).filter((d) => d.userId === user.id && d.guildId === guildId).length;
@@ -461,23 +460,22 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
 
     if (open >= MAX_OPEN_SETUPS) return notice(res, COLOR.red, '⚠️ Unfinished Setups', `Please complete or cancel your ${open} pending setup channels first.`);
 
-    console.log(`[DEBUG] Initializing /add-config for pipeline: "${cfgName}" by user: ${user.id}`);
-
     try {
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
 
-      const controllerId = await ensureController(guildId, user);
+      const controllerId = await ensureController(guildId, user, store, saveStore);
       await repostCards(guildId, user.id, controllerId);
       
       const randSuffix = Math.random().toString(36).substring(2, 6);
       const setupChannelName = `setup-${slug(cfgName)}-${randSuffix}`;
 
-      console.log(`[DEBUG] Creating setup channel "${setupChannelName}" in guild ${guildId}...`);
+      // Provision setup workspace channel inside USER_SETUP_ID category
       const setup = await DiscordRequest(`guilds/${guildId}/channels`, {
         method: 'POST',
         body: {
           name: setupChannelName,
           type: 0,
+          parent_id: process.env.USER_SETUP_ID,
           topic: '🔒 Secured setup channel. Automatically purges upon initialization.',
           permission_overwrites: privateOverwrites(guildId, user.id),
         },
@@ -492,7 +490,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         body: { ...setupPanel(setup.id, draft), content: `<@${user.id}> Your pipeline setup environment is ready!`, allowed_mentions: { users: [user.id] } },
       });
 
-      console.log(`[DEBUG] Successfully provisioned setup channel: ${setup.id}`);
       await editOriginal(token, {
         content: '',
         embeds: [{ color: COLOR.green, title: '✅ Setup Environment Provisioned', description: `Proceed in <#${setup.id}>.\nCommand Center: <#${controllerId}>` }],
