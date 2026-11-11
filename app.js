@@ -38,7 +38,14 @@ const COLOR = { blurple: 0x5865f2, green: 0x57f287, red: 0xed4245, grey: 0x4f545
 const row = (...components) => ({ type: 1, components });
 const btn = (custom_id, label, style = 2, disabled = false) => ({ type: 2, custom_id, label, style, disabled });
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-const quote = (t) => clip(t.split('\n').map((l) => `> ${l}`).join('\n'), 1024);
+
+// Safe quote helper to prevent Discord embed payload overflow
+const quote = (t) => {
+  if (!t) return '*Pending...*';
+  const truncated = clip(t, 350);
+  return truncated.split('\n').map((l) => `> ${l}`).join('\n');
+};
+
 const unix = (ms) => Math.floor(ms / 1000);
 
 function fmtDelay(s) {
@@ -111,7 +118,7 @@ function setupPanel(id, d) {
       fields: [
         { name: '📍 DESTINATION CHANNEL', value: hasChannel ? `<#${d.channelId}>` : '*Pending...*', inline: true },
         { name: '⏱️ FREQUENCY INTERVAL', value: hasDelay ? `Every ${fmtDelay(d.delay)}` : '*Pending...*', inline: true },
-        { name: '💬 PAYLOAD CONTENT', value: hasText ? `${lineCount} lines\n${quote(d.text)}` : '*Pending...*' },
+        { name: '💬 PAYLOAD CONTENT', value: hasText ? `${lineCount} lines (${d.text.length} chars)\n${quote(d.text)}` : '*Pending...*' },
       ],
       footer: { text: 'AutomateX Setup Session expires in 10 minutes • Secure Wizard' },
       timestamp: new Date().toISOString()
@@ -204,14 +211,12 @@ async function validate(field, raw, guildId, userId) {
       const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
       if (!activeToken) return { error: 'Authentication missing. Run `/add-token register`.' };
       
-      // FIX: Use the selfbot client to validate the channel to avoid Discord 401s
       const client = await getUserClient(userId, activeToken.trim());
       const ch = await client.channels.fetch(raw);
       
       if (!ch || !['GUILD_TEXT', 'GUILD_NEWS'].includes(ch.type)) return { error: 'Must be a text channel.' };
     } catch (err) {
       console.error('Channel validation failed:', err.message);
-      // Clean, specific error handling based on Discord API codes
       if (err.code === 10003) return { error: 'Channel does not exist or account lacks access.' };
       if (err.message.includes('401')) return { error: 'Token is invalid or session flagged by Discord.' };
       return { error: `Validation failed: ${err.message.slice(0, 80)}` };
