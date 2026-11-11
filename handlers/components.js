@@ -194,7 +194,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           }],
           components: [
             row(
-              btn(`pay_method:gcash:${selected}`, '🇵🇭 GCash / Maya', 3),
+              btn(`pay_method:gcash:${selected}`, '🇵🇭 GCash', 3),
               btn(`pay_method:paypal:${selected}`, '🅿️ PayPal', 1),
               btn(`pay_method:wise:${selected}`, '💸 Wise', 1),
               btn(`pay_method:dls:${selected}`, '💎 Diamond Locks', 2)
@@ -228,11 +228,11 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
             color: COLOR.green,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
             description: 
-              '🇵🇭 **GCash / Maya QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-              '• **Scan the QR code below** using your GCash or Maya app to complete payment.\n\n' +
+              '🇵🇭 **GCash QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+              '• **Scan the QR code below** using your GCash app to complete payment.\n\n' +
               '📌 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
             image: {
-              url: 'https://media.discordapp.net/attachments/1567187360733601836/1570066203928567898/9b700e06-2668-49e1-8ed6-9c497bce911a.png?ex=6af5bd99&is=6af46c19&hm=aa2f82239a56302c286767b2b81b32ae8cacb7b62afafbcdd74d868e4e6ca9d5&=&format=webp&quality=lossless&width=263&height=512'
+              url: 'https://i.imgur.com/JHVxpgp.png'
             },
             footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
           }]
@@ -253,7 +253,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
               '• **Transfer Mode:** Friends & Family (F&F)\n\n' +
               '📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
             image: {
-              url: 'https://media.discordapp.net/attachments/1567187360733601836/1570066851189493830/892557678_1708759164185326_6461836944759677321_n.png?ex=6af5be33&is=6af46cb3&hm=a9084ed777711b49f93ebfcb2f74869cd714118c62f40cff2b0d8b4f6c330796&=&format=webp&quality=lossless'
+              url: 'https://i.imgur.com/XjZL7id.png'
             },
             footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
           }]
