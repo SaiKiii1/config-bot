@@ -155,7 +155,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
 
     try {
-      // Provision private ticket channel
       const ticketName = `ticket-${slug(user.username)}-${selected.replace('pkg_', '')}`;
       const ticketChannel = await DiscordRequest(`guilds/${guildId}/channels`, {
         method: 'POST',
@@ -167,7 +166,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
         }
       });
 
-      // Send initial welcome & payment selection panel into ticket
       const ADMIN_ID = process.env.ADMIN_ID;
       await DiscordRequest(`channels/${ticketChannel.id}/messages`, {
         method: 'POST',
@@ -196,7 +194,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           }],
           components: [
             row(
-              btn(`pay_method:gcash:${selected}`, '🇵🇭 GCash', 3),
+              btn(`pay_method:gcash:${selected}`, '🇵🇭 GCash / Maya', 3),
               btn(`pay_method:paypal:${selected}`, '🅿️ PayPal', 1),
               btn(`pay_method:wise:${selected}`, '💸 Wise', 1),
               btn(`pay_method:dls:${selected}`, '💎 Diamond Locks', 2)
@@ -220,41 +218,84 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
 
   // --- PAYMENT METHOD BUTTON HANDLER INSIDE TICKET ---
   if (data.custom_id?.startsWith('pay_method:')) {
-    const [, method, pkgKey] = data.custom_id.split(':');
-    
-    const instructions = {
-      gcash: 
-        '🇵🇭 **GCash / Maya Payment Details**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-        '• **Number:** `09XX-XXX-XXXX` *(Update with your number)*\n' +
-        '• **Account Name:** `Your Name` *(Update with your name)*\n\n' +
-        '📌 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
-      paypal: 
-        '🅿️ **PayPal International Payment Details**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-        '• **PayPal Email:** `yourpaypal@email.com` *(Update with your PayPal)*\n' +
-        '• **Transfer Mode:** Friends & Family (F&F)\n\n' +
-        '📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
-      wise: 
-        '💸 **Wise International Payment Details**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-        '• **Wise Email / Tag:** `yourwise@email.com` *(Update with your Wise details)*\n\n' +
-        '📌 *Please send a screenshot of the payment receipt here in this channel once processed!*',
-      dls: 
-        '💎 **Growtopia Diamond Locks (DLs) Details**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-        '• **World Name:** `YOUR_WORLD_NAME` *(Update with world name)*\n' +
-        '• **Drop Location:** Drop DLs in the Donation / Display Box.\n\n' +
-        '📌 *Please reply here with your Growtopia In-Game Name (IGN) and screenshot once dropped!*'
-    };
+    const [, method] = data.custom_id.split(':');
 
-    return res.send({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: {
-        embeds: [{
-          color: COLOR.green,
-          title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-          description: instructions[method] || '⚠️ Payment details unavailable.',
-          footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
-        }]
-      }
-    });
+    if (method === 'gcash') {
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          embeds: [{
+            color: COLOR.green,
+            title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
+            description: 
+              '🇵🇭 **GCash / Maya QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+              '• **Scan the QR code below** using your GCash or Maya app to complete payment.\n\n' +
+              '📌 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
+            image: {
+              url: 'https://media.discordapp.net/attachments/1567187360733601836/1570066203928567898/9b700e06-2668-49e1-8ed6-9c497bce911a.png?ex=6af5bd99&is=6af46c19&hm=aa2f82239a56302c286767b2b81b32ae8cacb7b62afafbcdd74d868e4e6ca9d5&=&format=webp&quality=lossless&width=263&height=512'
+            },
+            footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
+          }]
+        }
+      });
+    }
+
+    if (method === 'paypal') {
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          embeds: [{
+            color: COLOR.green,
+            title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
+            description: 
+              '🅿️ **PayPal International QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+              '• **Scan the QR code below** using your PayPal app to complete payment.\n' +
+              '• **Transfer Mode:** Friends & Family (F&F)\n\n' +
+              '📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
+            image: {
+              url: 'https://media.discordapp.net/attachments/1567187360733601836/1570066851189493830/892557678_1708759164185326_6461836944759677321_n.png?ex=6af5be33&is=6af46cb3&hm=a9084ed777711b49f93ebfcb2f74869cd714118c62f40cff2b0d8b4f6c330796&=&format=webp&quality=lossless'
+            },
+            footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
+          }]
+        }
+      });
+    }
+
+    if (method === 'wise') {
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          embeds: [{
+            color: COLOR.blurple,
+            title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
+            description: 
+              '💸 **Wise International Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+              '• **Please wait for assistance from our admins.**\n' +
+              '• An administrator will respond in this ticket shortly to provide Wise payment details and assist you with your transfer.\n\n' +
+              '📌 *Thank you for your patience!*',
+            footer: { text: 'AutomateX Checkout • Admin Assistance Required' }
+          }]
+        }
+      });
+    }
+
+    if (method === 'dls') {
+      return res.send({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          embeds: [{
+            color: COLOR.blurple,
+            title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
+            description: 
+              '💎 **Growtopia Diamond Locks (DLs) Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+              '• **Please wait for assistance from our admins.**\n' +
+              '• An administrator will join this ticket shortly to provide the World Name, trade details, or meet you in-game.\n\n' +
+              '📌 *Thank you for your patience!*',
+            footer: { text: 'AutomateX Checkout • Admin Assistance Required' }
+          }]
+        }
+      });
+    }
   }
 
   // --- TICKET CLOSURE HANDLER ---
