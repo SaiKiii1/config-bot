@@ -4,7 +4,6 @@ import { DiscordRequest, slug, privateOverwrites, redactToken, sendDM, manageRol
 import { stopAllRunnersForUser, stopRunner } from '../services/runner.js';
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, amber: 0xfee75c, red: 0xed4245 };
-const MAX_CONFIGS = 10;
 const MAX_OPEN_SETUPS = 3;
 
 const reply = (res, data) =>
@@ -14,6 +13,25 @@ const reply = (res, data) =>
   });
 const ephemeral = (res, content) => reply(res, { content });
 const notice = (res, color, title, description) => reply(res, { embeds: [{ color, title, description }] });
+
+// Helper to resolve dynamic quota limits based on clearance tier
+function getMaxConfigs(userId, store) {
+  const ADMIN_ID = process.env.ADMIN_ID;
+  if (userId === ADMIN_ID) return Infinity;
+
+  const access = store.access?.[userId];
+  if (!access) return 5;
+
+  if (access.expiresAt === 'permanent') return Infinity;
+
+  const label = access.durationLabel || '';
+  if (label.includes('Permanent') || label.includes('Lifetime')) return Infinity;
+  if (label.includes('7 Days') || label.includes('1 Week')) return 25;
+  if (label.includes('3 Days')) return 10;
+  if (label.includes('Free Trial') || label.includes('24 Hours')) return 5;
+
+  return 5;
+}
 
 const helpEmbed = () => ({
   color: COLOR.blurple,
@@ -96,9 +114,9 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
             {
               name: '💎 OFFICIAL LICENSE PRICING',
               value: 
-                '• 🥉 **3 Days Pass:** *(1 Discord Account Slot • Config Pipelines)*\n' +
-                '• 🥈 **7 Days Pass:** *(1 Discord Account Slot • Config Pipelines)*\n' +
-                '• 🥇 **Lifetime Pass:** *(1 Discord Account Slot • Config Pipelines)*',
+                '• 🥉 **3 Days Pass:** *(1 Account Slot • 10 Config Pipelines)*\n' +
+                '• 🥈 **7 Days Pass:** *(1 Account Slot • 25 Config Pipelines)*\n' +
+                '• 🥇 **Lifetime Pass:** *(1 Account Slot • Unlimited Configs)*',
               inline: false
             },
             {
@@ -127,9 +145,9 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
                 custom_id: 'store_select_package',
                 placeholder: '💳 Click here to view package details...',
                 options: [
-                  { label: 'Paket 3 Hari (3 Days Pass)', value: 'pkg_3d', description: '3 Days Access • 1 Account Slot', emoji: { name: '🥉' } },
-                  { label: 'Paket 7 Hari (7 Days Pass)', value: 'pkg_7d', description: '7 Days Access • 1 Account Slot', emoji: { name: '🥈' } },
-                  { label: 'Paket Lifetime (Lifetime Pass)', value: 'pkg_lifetime', description: 'Permanent Access • 1 Account Slot', emoji: { name: '👑' } }
+                  { label: 'Paket 3 Hari (3 Days Pass)', value: 'pkg_3d', description: '3 Days Access • 10 Config Slots', emoji: { name: '🥉' } },
+                  { label: 'Paket 7 Hari (7 Days Pass)', value: 'pkg_7d', description: '7 Days Access • 25 Config Slots', emoji: { name: '🥈' } },
+                  { label: 'Paket Lifetime (Lifetime Pass)', value: 'pkg_lifetime', description: 'Permanent Access • Unlimited Configs', emoji: { name: '👑' } }
                 ]
               }
             ]
@@ -367,10 +385,13 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     const mine = mineOf(guildId, user.id);
     if (!mine.length) return notice(res, COLOR.blurple, '📭 Zero Pipelines Active', 'Run `/add-config` to provision your first automation channel.');
     const ctrl = store.users[`${guildId}:${user.id}`]?.controllerChannelId;
+    const maxConfigs = getMaxConfigs(user.id, store);
+    const limitLabel = maxConfigs === Infinity ? '∞' : maxConfigs;
+
     return reply(res, {
       embeds: [{
         color: COLOR.blurple,
-        title: `📋 Configuration Registry (${mine.length}/${MAX_CONFIGS})`,
+        title: `📋 Configuration Registry (${mine.length}/${limitLabel})`,
         description: ctrl ? `Manage active pipelines in <#${ctrl}>.` : undefined,
         fields: mine.map(([, c]) => ({
           name: `${c.running ? '🟢' : '🔴'} ${c.name.slice(0, 200)}`,
@@ -417,9 +438,24 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     const cfgName = data.options?.[0]?.value?.trim()?.slice(0, 50);
     if (!cfgName) return ephemeral(res, '⚠️ Configuration name cannot be empty.');
 
+    // Dynamic Tier Quota Evaluation
+    const maxConfigs = getMaxConfigs(user.id, store);
     const saved = mineOf(guildId, user.id).length;
     const open = Object.values(store.drafts || {}).filter((d) => d.userId === user.id && d.guildId === guildId).length;
-    if (saved + open >= MAX_CONFIGS) return notice(res, COLOR.red, '⚠️ Quota Exceeded', `Maximum limit of **${MAX_CONFIGS}** configurations reached.`);
+
+    if (saved + open >= maxConfigs) {
+      const limitStr = maxConfigs === Infinity ? 'Unlimited' : maxConfigs;
+      const tierLabel = store.access[user.id]?.durationLabel || 'Free Trial';
+      return notice(
+        res,
+        COLOR.red,
+        '⚠️ Quota Exceeded',
+        `Maximum limit of **${limitStr}** configuration(s) reached for your clearance tier (\`${tierLabel}\`).${
+          maxConfigs !== Infinity ? '\n\n👉 *Upgrade your pass in the store channel to unlock more configuration slots!*' : ''
+        }`
+      );
+    }
+
     if (open >= MAX_OPEN_SETUPS) return notice(res, COLOR.red, '⚠️ Unfinished Setups', `Please complete or cancel your ${open} pending setup channels first.`);
 
     console.log(`[DEBUG] Initializing /add-config for pipeline: "${cfgName}" by user: ${user.id}`);
