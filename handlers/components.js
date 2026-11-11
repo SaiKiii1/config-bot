@@ -156,11 +156,14 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
 
     try {
       const ticketName = `ticket-${slug(user.username)}-${selected.replace('pkg_', '')}`;
+      
+      // Provision ticket channel inside TICKET_CATEGORY_ID category
       const ticketChannel = await DiscordRequest(`guilds/${guildId}/channels`, {
         method: 'POST',
         body: {
           name: ticketName,
           type: 0,
+          parent_id: process.env.TICKET_CATEGORY_ID,
           topic: `🎫 Order Ticket for ${user.username} | Package: ${pkg.name}`,
           permission_overwrites: privateOverwrites(guildId, user.id)
         }
