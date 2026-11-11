@@ -27,7 +27,6 @@ function fmtDelay(s) {
 const row = (...components) => ({ type: 1, components });
 const btn = (custom_id, label, style = 2, disabled = false) => ({ type: 2, custom_id, label, style, disabled });
 
-// --- UPDATED MAXPOST-STYLE ACTIVE CARD PANEL ---
 export function cardPanel(id, c) {
   const isRunning = c.running;
   const hasError = Boolean(c.lastError);
@@ -78,7 +77,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
   const user = req.body.member?.user ?? req.body.user;
   const guildId = req.body.guild_id;
 
-  // --- STORE FRONT COMPONENT INTERACTIONS ---
   if (data.custom_id === 'store_free_trial') {
     store.trials ??= {};
 
@@ -138,7 +136,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     });
   }
 
-  // --- DYNAMIC TICKET CREATION FROM STORE SELECT MENU ---
   if (data.custom_id === 'store_select_package') {
     if (!guildId) return ephemeral(res, '⚠️ Tickets can only be created inside the server.');
 
@@ -157,7 +154,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     try {
       const ticketName = `ticket-${slug(user.username)}-${selected.replace('pkg_', '')}`;
       
-      // Provision ticket channel inside TICKET_CATEGORY_ID category
       const ticketChannel = await DiscordRequest(`guilds/${guildId}/channels`, {
         method: 'POST',
         body: {
@@ -219,7 +215,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     return;
   }
 
-  // --- PAYMENT METHOD BUTTON HANDLER INSIDE TICKET ---
   if (data.custom_id?.startsWith('pay_method:')) {
     const [, method] = data.custom_id.split(':');
 
@@ -301,7 +296,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     }
   }
 
-  // --- TICKET CLOSURE HANDLER ---
   if (data.custom_id?.startsWith('close_ticket:')) {
     const channelId = data.custom_id.split(':')[1];
     res.send({
@@ -346,7 +340,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
 
   const [action, ...p] = data.custom_id.split(':');
 
-  // --- COMPONENT AUTHORIZATION GATE ---
   const ADMIN_ID = process.env.ADMIN_ID;
   const access = store.access[user.id];
   const now = Date.now();
@@ -356,7 +349,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       return ephemeral(res, '🚫 Clearance Required: Your security clearance has expired or been revoked. You cannot interact with these controls.');
     }
   }
-  // ------------------------------------
 
   if (action === 'cred' && p[0] === 'remove') {
     const label = p[1];
@@ -510,7 +502,6 @@ export async function handleModalSubmit(req, res, store, saveStore, lookup, vali
   const { data } = req.body;
   const user = req.body.member?.user ?? req.body.user;
 
-  // --- MODAL AUTHORIZATION GATE ---
   const ADMIN_ID = process.env.ADMIN_ID;
   const access = store.access[user.id];
   const now = Date.now();
@@ -520,7 +511,6 @@ export async function handleModalSubmit(req, res, store, saveStore, lookup, vali
       return ephemeral(res, '🚫 Clearance Required: Your security clearance has expired or been revoked.');
     }
   }
-  // --------------------------------
 
   if (data.custom_id === 'modal:add-token:save') {
     if (Object.keys(store.credentials[user.id] || {}).length >= 1) {
