@@ -476,7 +476,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
           name: setupChannelName,
           type: 0,
           parent_id: process.env.USER_SETUP_ID,
-          topic: '🔒 Secured setup channel. Automatically purges upon initialization.',
+          topic: '🔒 Secured setup channel. Self-destructs automatically in 10 minutes if unconfirmed.',
           permission_overwrites: privateOverwrites(guildId, user.id),
         },
       });
@@ -485,6 +485,18 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       store.drafts[setup.id] = draft;
       saveStore(store);
 
+      // --- 10-MINUTE AUTOMATIC EXPIRATION TIMER ---
+      const EXPIRATION_MS = 10 * 60 * 1000;
+      setTimeout(async () => {
+        // If the draft still exists in store (meaning user hasn't confirmed or cancelled it)
+        if (store.drafts[setup.id]) {
+          console.log(`[AUTOCLEAN] Setup workspace ${setup.id} timed out after 10m. Destroying...`);
+          delete store.drafts[setup.id];
+          saveStore(store);
+          await DiscordRequest(`channels/${setup.id}`, { method: 'DELETE' }).catch(() => {});
+        }
+      }, EXPIRATION_MS);
+
       await DiscordRequest(`channels/${setup.id}/messages`, {
         method: 'POST',
         body: { ...setupPanel(setup.id, draft), content: `<@${user.id}> Your pipeline setup environment is ready!`, allowed_mentions: { users: [user.id] } },
@@ -492,7 +504,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
 
       await editOriginal(token, {
         content: '',
-        embeds: [{ color: COLOR.green, title: '✅ Setup Environment Provisioned', description: `Proceed in <#${setup.id}>.\nCommand Center: <#${controllerId}>` }],
+        embeds: [{ color: COLOR.green, title: '✅ Setup Environment Provisioned', description: `Proceed in <#${setup.id}> (Self-destructs in 10 mins).\nCommand Center: <#${controllerId}>` }],
       });
     } catch (err) {
       console.error('[ERROR] Failed to execute /add-config:', err?.message || err);
