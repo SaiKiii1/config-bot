@@ -1,6 +1,6 @@
 // handlers/components.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
-import { DiscordRequest, encryptCredential, decryptCredential, redactToken, manageRole } from '../utils.js';
+import { DiscordRequest, encryptCredential, decryptCredential, redactToken, manageRole, slug, privateOverwrites } from '../utils.js';
 import { startRunner, stopRunner } from '../services/runner.js';
 import { getUserClient } from '../client-manager.js';
 
@@ -76,6 +76,7 @@ export function cardPanel(id, c) {
 export async function handleComponent(req, res, store, saveStore, lookup, modal, setupPanel, cardPanelArg, validate, parseDelay, refreshCard, editOriginal) {
   const { data, token } = req.body;
   const user = req.body.member?.user ?? req.body.user;
+  const guildId = req.body.guild_id;
 
   // --- STORE FRONT COMPONENT INTERACTIONS ---
   if (data.custom_id === 'store_free_trial') {
@@ -105,9 +106,9 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     };
     saveStore(store);
 
-    if (req.body.guild_id) {
-      await manageRole(req.body.guild_id, user.id, process.env.SUBSCRIBER_ROLE_ID, 'PUT').catch(() => {});
-      await manageRole(req.body.guild_id, user.id, process.env.MEMBER_ROLE_ID, 'DELETE').catch(() => {});
+    if (guildId) {
+      await manageRole(guildId, user.id, process.env.SUBSCRIBER_ROLE_ID, 'PUT').catch(() => {});
+      await manageRole(guildId, user.id, process.env.MEMBER_ROLE_ID, 'DELETE').catch(() => {});
     }
 
     return reply(res, {
@@ -137,15 +138,136 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     });
   }
 
+  // --- DYNAMIC TICKET CREATION FROM STORE SELECT MENU ---
   if (data.custom_id === 'store_select_package') {
+    if (!guildId) return ephemeral(res, '⚠️ Tickets can only be created inside the server.');
+
     const selected = data.values?.[0];
-    const packageDetails = {
-      pkg_3d: '🥉 **3 Days Pass**\n• Price: **₱75** (~$1.30 USD) or **30 Diamond Locks**\n• Duration: 3 Days\n• Includes: 1 Account Token Slot + 10 Config Pipelines.\n👉 *Open a ticket to purchase via GCash, PayPal, Wise, or Diamond Locks!*',
-      pkg_7d: '🥈 **7 Days Pass**\n• Price: **₱150** (~$2.60 USD) or **50 Diamond Locks**\n• Duration: 7 Days\n• Includes: 1 Account Token Slot + 25 Config Pipelines.\n👉 *Open a ticket to purchase via GCash, PayPal, Wise, or Diamond Locks!*',
-      pkg_lifetime: '👑 **Lifetime Pass**\n• Price: **₱300** (~$5.20 USD) or **100 Diamond Locks**\n• Duration: Permanent / Lifetime\n• Includes: 1 Account Token Slot + Unlimited Config Pipelines + Priority Support.\n👉 *Open a ticket to purchase via GCash, PayPal, Wise, or Diamond Locks!*'
+    const packages = {
+      pkg_3d: { name: 'Paket 3 Hari (3 Days Pass)', pricePHP: '₱75', priceUSD: '~$1.30 USD', priceDLs: '30 Diamond Locks', configs: '10 Config Slots' },
+      pkg_7d: { name: 'Paket 7 Hari (7 Days Pass)', pricePHP: '₱150', priceUSD: '~$2.60 USD', priceDLs: '50 Diamond Locks', configs: '25 Config Slots' },
+      pkg_lifetime: { name: 'Paket Lifetime (Lifetime Pass)', pricePHP: '₱300', priceUSD: '~$5.20 USD', priceDLs: '100 Diamond Locks', configs: 'Unlimited Configs' }
     };
 
-    return reply(res, { content: packageDetails[selected] || '⚠️ Package details unavailable.' });
+    const pkg = packages[selected];
+    if (!pkg) return ephemeral(res, '⚠️ Invalid package selected.');
+
+    res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
+
+    try {
+      // Provision private ticket channel
+      const ticketName = `ticket-${slug(user.username)}-${selected.replace('pkg_', '')}`;
+      const ticketChannel = await DiscordRequest(`guilds/${guildId}/channels`, {
+        method: 'POST',
+        body: {
+          name: ticketName,
+          type: 0,
+          topic: `🎫 Order Ticket for ${user.username} | Package: ${pkg.name}`,
+          permission_overwrites: privateOverwrites(guildId, user.id)
+        }
+      });
+
+      // Send initial welcome & payment selection panel into ticket
+      const ADMIN_ID = process.env.ADMIN_ID;
+      await DiscordRequest(`channels/${ticketChannel.id}/messages`, {
+        method: 'POST',
+        body: {
+          content: `<@${user.id}> ${ADMIN_ID ? `<@${ADMIN_ID}>` : ''}`,
+          embeds: [{
+            color: COLOR.blurple,
+            title: `🎫 ORDER TICKET — ${pkg.name.toUpperCase()}`,
+            description: `Hello <@${user.id}>! Thank you for choosing AutomateX.\n\nYou have selected to purchase **${pkg.name}**.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            fields: [
+              { name: '📦 Selected Package', value: `\`${pkg.name}\``, inline: true },
+              { name: '⚙️ Pipeline Capacity', value: `\`${pkg.configs}\``, inline: true },
+              { 
+                name: '💰 Price Options', 
+                value: `• **Local Currency:** ${pkg.pricePHP}\n• **USD International:** ${pkg.priceUSD}\n• **Growtopia:** ${pkg.priceDLs}`, 
+                inline: false 
+              },
+              { 
+                name: '💳 SELECT PAYMENT METHOD BELOW', 
+                value: 'Click a button below to view specific payment account details & instructions!', 
+                inline: false 
+              }
+            ],
+            footer: { text: 'AutomateX Checkout Ticket • Select payment method to proceed' },
+            timestamp: new Date().toISOString()
+          }],
+          components: [
+            row(
+              btn(`pay_method:gcash:${selected}`, '🇵🇭 GCash / Maya', 3),
+              btn(`pay_method:paypal:${selected}`, '🅿️ PayPal', 1),
+              btn(`pay_method:wise:${selected}`, '💸 Wise', 1),
+              btn(`pay_method:dls:${selected}`, '💎 Diamond Locks', 2)
+            ),
+            row(
+              btn(`close_ticket:${ticketChannel.id}`, '🔒 Close Ticket', 4)
+            )
+          ]
+        }
+      });
+
+      await editOriginal(token, {
+        content: `✅ **Ticket Created!** Proceed to <#${ticketChannel.id}> to complete your order.`
+      });
+    } catch (err) {
+      console.error('[ERROR] Failed to create order ticket:', err);
+      await editOriginal(token, { content: `⚠️ **Ticket Creation Failed**: ${err.message}` }).catch(() => {});
+    }
+    return;
+  }
+
+  // --- PAYMENT METHOD BUTTON HANDLER INSIDE TICKET ---
+  if (data.custom_id?.startsWith('pay_method:')) {
+    const [, method, pkgKey] = data.custom_id.split(':');
+    
+    const instructions = {
+      gcash: 
+        '🇵🇭 **GCash / Maya Payment Details**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+        '• **Number:** `09XX-XXX-XXXX` *(Update with your number)*\n' +
+        '• **Account Name:** `Your Name` *(Update with your name)*\n\n' +
+        '📌 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
+      paypal: 
+        '🅿️ **PayPal International Payment Details**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+        '• **PayPal Email:** `yourpaypal@email.com` *(Update with your PayPal)*\n' +
+        '• **Transfer Mode:** Friends & Family (F&F)\n\n' +
+        '📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
+      wise: 
+        '💸 **Wise International Payment Details**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+        '• **Wise Email / Tag:** `yourwise@email.com` *(Update with your Wise details)*\n\n' +
+        '📌 *Please send a screenshot of the payment receipt here in this channel once processed!*',
+      dls: 
+        '💎 **Growtopia Diamond Locks (DLs) Details**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
+        '• **World Name:** `YOUR_WORLD_NAME` *(Update with world name)*\n' +
+        '• **Drop Location:** Drop DLs in the Donation / Display Box.\n\n' +
+        '📌 *Please reply here with your Growtopia In-Game Name (IGN) and screenshot once dropped!*'
+    };
+
+    return res.send({
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: {
+        embeds: [{
+          color: COLOR.green,
+          title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
+          description: instructions[method] || '⚠️ Payment details unavailable.',
+          footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
+        }]
+      }
+    });
+  }
+
+  // --- TICKET CLOSURE HANDLER ---
+  if (data.custom_id?.startsWith('close_ticket:')) {
+    const channelId = data.custom_id.split(':')[1];
+    res.send({
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: { content: '🔒 **Closing Ticket**: Purging channel in 5 seconds...' }
+    });
+    setTimeout(() => {
+      DiscordRequest(`channels/${channelId}`, { method: 'DELETE' }).catch(() => {});
+    }, 5000);
+    return;
   }
 
   if (data.custom_id === 'store_guide') {
