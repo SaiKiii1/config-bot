@@ -38,7 +38,7 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       if (access && access.expiresAt !== 'permanent' && now > access.expiresAt) {
         const targetUser = currentConfig.userId;
         
-        // FIX: Close WebSocket to prevent memory leaks for expired users
+        // Close WebSocket connection to prevent memory leaks
         stopUserClient(targetUser);
 
         delete store.access[targetUser];
@@ -53,16 +53,16 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
         }
         saveStore(store);
 
-        await manageRole(currentConfig.guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE');
-        await manageRole(currentConfig.guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT');
+        await manageRole(currentConfig.guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE').catch(() => {});
+        await manageRole(currentConfig.guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT').catch(() => {});
 
         sendDM(targetUser, {
           embeds: [{
-            color: 0xfee75c,
-            title: '🟡 SUBSCRIPTION ACCESS EXPIRED',
-            description: `Hello <@${targetUser}>! Your AutomateX subscription access period has ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Automated Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+            color: 0xed4245,
+            title: '⌛ SUBSCRIPTION ACCESS EXPIRED',
+            description: `Hello <@${targetUser}>! Your AutomateX subscription access period (\`${access.durationLabel || 'Standard Access'}\`) has officially ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Automated Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
           }]
-        });
+        }).catch(() => {});
         return;
       } else if (!access) {
         currentConfig.running = false;
@@ -88,7 +88,7 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     }
 
     try {
-      // FIX: Use the unified client manager to fetch the existing WebSocket connection
+      // Use unified client manager to fetch the active connection
       const client = await getUserClient(currentConfig.userId, activeToken);
 
       const channel = await client.channels.fetch(currentConfig.channelId);
@@ -176,9 +176,9 @@ export async function cleanupExpiredAccess(store, saveStore) {
 
       sendDM(userId, {
         embeds: [{
-          color: 0xfee75c,
-          title: '🟡 SUBSCRIPTION ACCESS EXPIRED',
-          description: `Hello <@${userId}>! Your AutomateX access period has ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Security Action:** All registered account tokens, active pipelines, and controller channels have been purged.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Security Sweep*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+          color: 0xed4245,
+          title: '⌛ SUBSCRIPTION ACCESS EXPIRED',
+          description: `Hello <@${userId}>! Your AutomateX access subscription period (\`${access.durationLabel || 'Standard Access'}\`) has ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Security Action:** All registered account tokens, active pipelines, and controller channels have been purged.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Security Sweep*\n<t:${Math.floor(Date.now() / 1000)}:F>`
         }]
       }).catch(() => {});
 
