@@ -145,3 +145,46 @@ export function stopAllRunnersForUser(guildId, userId, store, saveStore, refresh
   if (mine.length) saveStore(store);
   return mine;
 }
+
+// AUTOMATED BACKGROUND EXPIRATION SWEEPER
+export async function cleanupExpiredAccess(store, saveStore) {
+  const now = Date.now();
+  let updated = false;
+
+  for (const [userId, access] of Object.entries(store.access || {})) {
+    if (access && access.expiresAt !== 'permanent' && now > access.expiresAt) {
+      console.log(`[Auto-Cleanup] Access expired for user ${userId}. Sweeping credentials & roles...`);
+      
+      stopUserClient(userId);
+
+      delete store.access[userId];
+      delete store.credentials[userId];
+
+      for (const [cfgId, cfg] of Object.entries(store.configs || {})) {
+        if (cfg.userId === userId) {
+          if (cfg.running) stopRunner(cfgId, store);
+          DiscordRequest(`channels/${cfg.controllerChannelId}/messages/${cfg.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
+          delete store.configs[cfgId];
+        }
+      }
+
+      const primaryGuildId = process.env.GUILD_ID;
+      if (primaryGuildId) {
+        await manageRole(primaryGuildId, userId, process.env.SUBSCRIBER_ROLE_ID, 'DELETE').catch(() => {});
+        await manageRole(primaryGuildId, userId, process.env.MEMBER_ROLE_ID, 'PUT').catch(() => {});
+      }
+
+      sendDM(userId, {
+        embeds: [{
+          color: 0xfee75c,
+          title: '🟡 SUBSCRIPTION ACCESS EXPIRED',
+          description: `Hello <@${userId}>! Your AutomateX access period has ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Security Action:** All registered account tokens, active pipelines, and controller channels have been purged.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Security Sweep*\n<t:${Math.floor(Date.now() / 1000)}:F>`
+        }]
+      }).catch(() => {});
+
+      updated = true;
+    }
+  }
+
+  if (updated) saveStore(store);
+}
