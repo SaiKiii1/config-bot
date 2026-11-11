@@ -16,7 +16,7 @@ import express from 'express';
 import { getUserClient } from './client-manager.js';
 import { InteractionType, InteractionResponseType, verifyKeyMiddleware } from 'discord-interactions';
 import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential } from './utils.js';
-import { startRunner } from './services/runner.js';
+import { startRunner, cleanupExpiredAccess } from './services/runner.js';
 import { handleCommand } from './handlers/commands.js';
 // We are importing cardPanel so app.js can actually generate and refresh the UI
 import { handleComponent, handleModalSubmit, cardPanel } from './handlers/components.js';
@@ -303,4 +303,12 @@ app.listen(PORT, () => {
   for (const [id, c] of Object.entries(store.configs)) {
     if (c.running) startRunner(id, false, store, save, refreshCard);
   }
+
+  // Initial access expiration sweep on server startup
+  cleanupExpiredAccess(store, save).catch(console.error);
+
+  // Periodic background sweep every 15 minutes (900,000 ms)
+  setInterval(() => {
+    cleanupExpiredAccess(store, save).catch(console.error);
+  }, 15 * 60 * 1000);
 });
