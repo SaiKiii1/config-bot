@@ -39,13 +39,6 @@ const row = (...components) => ({ type: 1, components });
 const btn = (custom_id, label, style = 2, disabled = false) => ({ type: 2, custom_id, label, style, disabled });
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
-// Safe quote helper to prevent Discord embed payload overflow
-const quote = (t) => {
-  if (!t) return '*Pending...*';
-  const truncated = clip(t, 350);
-  return truncated.split('\n').map((l) => `> ${l}`).join('\n');
-};
-
 const unix = (ms) => Math.floor(ms / 1000);
 
 function fmtDelay(s) {
@@ -109,6 +102,9 @@ function setupPanel(id, d) {
   const statusBadge = complete ? '🟢 READY' : '🟠 IN PROGRESS';
   const lineCount = d.text ? d.text.split('\n').length : 0;
 
+  // Safe preview snippet capped at 300 characters to prevent embed field limit overflows
+  const previewText = d.text ? clip(d.text, 300) : '*Pending...*';
+
   return {
     content: `<@${d.userId}> Your pipeline setup environment is ready!`,
     embeds: [{
@@ -118,7 +114,10 @@ function setupPanel(id, d) {
       fields: [
         { name: '📍 DESTINATION CHANNEL', value: hasChannel ? `<#${d.channelId}>` : '*Pending...*', inline: true },
         { name: '⏱️ FREQUENCY INTERVAL', value: hasDelay ? `Every ${fmtDelay(d.delay)}` : '*Pending...*', inline: true },
-        { name: '💬 PAYLOAD CONTENT', value: hasText ? `${lineCount} lines (${d.text.length} chars)\n${quote(d.text)}` : '*Pending...*' },
+        { 
+          name: '💬 PAYLOAD CONTENT', 
+          value: hasText ? `${lineCount} lines (${d.text.length} chars)\n> ${previewText}` : '*Pending...*' 
+        },
       ],
       footer: { text: 'AutomateX Setup Session expires in 10 minutes • Secure Wizard' },
       timestamp: new Date().toISOString()
