@@ -15,7 +15,7 @@ import 'dotenv/config';
 import express from 'express';
 import { getUserClient } from './client-manager.js';
 import { InteractionType, InteractionResponseType, verifyKeyMiddleware } from 'discord-interactions';
-import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential } from './utils.js';
+import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential, cleanupExpiredDrafts } from './utils.js';
 import { startRunner, cleanupExpiredAccess } from './services/runner.js';
 import { handleCommand } from './handlers/commands.js';
 // We are importing cardPanel so app.js can actually generate and refresh the UI
@@ -119,7 +119,7 @@ async function ensureController(guildId, user) {
     try { await DiscordRequest(`channels/${existing}`); return existing; } catch (e) { if (e.status !== 404) throw e; }
   }
   const ch = await DiscordRequest(`guilds/${guildId}/channels`, {
-    method: 'POST', body: { name: `controller-${slug(user.username)}`, type: 0, topic: '🔒 Secured Command Center', permission_overwrites: privateOverwrites(guildId, user.id) },
+    method: 'POST', body: { name: `controller-${slug(user.username)}`, type: 0, parent_id: process.env.CONTROLLER_CATEGORY_ID, topic: '🔒 Secured Command Center', permission_overwrites: privateOverwrites(guildId, user.id) },
   });
   store.users[key] = { controllerChannelId: ch.id };
   save();
@@ -292,8 +292,8 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
 app.post('/events', express.json(), (req, res) => {
   const event = req.body;
   if (event && event.type === 'GUILD_MEMBER_ADD') {
-     const member = event.data;
-     sendWelcomeMessage(member.user.id, process.env.WELCOME_CHANNEL_ID).catch(console.error);
+      const member = event.data;
+      sendWelcomeMessage(member.user.id, process.env.WELCOME_CHANNEL_ID).catch(console.error);
   }
   res.sendStatus(200);
 });
@@ -304,11 +304,13 @@ app.listen(PORT, () => {
     if (c.running) startRunner(id, false, store, save, refreshCard);
   }
 
-  // Initial access expiration sweep on server startup
+  // Initial access & draft expiration sweeps on server startup
   cleanupExpiredAccess(store, save).catch(console.error);
+  cleanupExpiredDrafts(store, save).catch(console.error);
 
   // Periodic background sweep every 15 minutes (900,000 ms)
   setInterval(() => {
     cleanupExpiredAccess(store, save).catch(console.error);
+    cleanupExpiredDrafts(store, save).catch(console.error);
   }, 15 * 60 * 1000);
 });
