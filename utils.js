@@ -240,3 +240,24 @@ export async function ensureController(guildId, userIdOrUser, store, saveStoreFn
   }
   return ch.id;
 }
+
+// Sweeper function to clean up orphan setup channels on boot
+export async function cleanupExpiredDrafts(store, saveStoreFn) {
+  const EXPIRATION_MS = 10 * 60 * 1000; // 10 Minutes
+  const now = Date.now();
+  let cleaned = 0;
+
+  for (const [channelId, draft] of Object.entries(store.drafts || {})) {
+    if (now - draft.createdAt > EXPIRATION_MS) {
+      console.log(`[SWEEPER] Purging expired setup channel: ${channelId}`);
+      delete store.drafts[channelId];
+      cleaned++;
+      await DiscordRequest(`channels/${channelId}`, { method: 'DELETE' }).catch(() => {});
+    }
+  }
+
+  if (cleaned > 0) {
+    if (saveStoreFn) saveStoreFn(store);
+    else saveStore(store);
+  }
+}
