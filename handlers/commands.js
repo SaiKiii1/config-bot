@@ -123,7 +123,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
             {
               name: '💳 ACCEPTED PAYMENT METHODS',
               value: 
-                '• 🇵🇭 **GCash / Maya / Local E-Wallets**\n' +
+                '• 🇵🇭 **GCash**\n' +
                 '• 🅿️ **PayPal**\n' +
                 '• 💸 **Wise**\n' +
                 '• 💎 **Growtopia Diamond Locks (DLs)**\n\n' +
