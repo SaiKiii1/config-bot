@@ -148,9 +148,9 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
                 custom_id: 'store_select_package',
                 placeholder: '💳 Click here to view package details...',
                 options: [
-                  { label: 'Paket 3 Hari (3 Days Pass)', value: 'pkg_3d', description: '₱75 (~$1.30 USD) / 30 DLs • 10 Config Slots', emoji: { name: '🥉' } },
-                  { label: 'Paket 7 Hari (7 Days Pass)', value: 'pkg_7d', description: '₱150 (~$2.60 USD) / 50 DLs • 25 Config Slots', emoji: { name: '🥈' } },
-                  { label: 'Paket Lifetime (Lifetime Pass)', value: 'pkg_lifetime', description: '₱300 (~$5.20 USD) / 100 DLs • Unlimited Configs', emoji: { name: '👑' } }
+                  { label: '3 Days Pass', value: 'pkg_3d', description: '₱75 (~$1.30 USD) / 30 DLs • 10 Config Slots', emoji: { name: '🥉' } },
+                  { label: '7 Days Pass', value: 'pkg_7d', description: '₱150 (~$2.60 USD) / 50 DLs • 25 Config Slots', emoji: { name: '🥈' } },
+                  { label: 'Lifetime Pass', value: 'pkg_lifetime', description: '₱300 (~$5.20 USD) / 100 DLs • Unlimited Configs', emoji: { name: '👑' } }
                 ]
               }
             ]

@@ -144,9 +144,9 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
 
     const selected = data.values?.[0];
     const packages = {
-      pkg_3d: { name: 'Paket 3 Hari (3 Days Pass)', pricePHP: '₱75', priceUSD: '~$1.30 USD', priceDLs: '30 Diamond Locks', configs: '10 Config Slots' },
-      pkg_7d: { name: 'Paket 7 Hari (7 Days Pass)', pricePHP: '₱150', priceUSD: '~$2.60 USD', priceDLs: '50 Diamond Locks', configs: '25 Config Slots' },
-      pkg_lifetime: { name: 'Paket Lifetime (Lifetime Pass)', pricePHP: '₱300', priceUSD: '~$5.20 USD', priceDLs: '100 Diamond Locks', configs: 'Unlimited Configs' }
+      pkg_3d: { name: '3 Days Pass', pricePHP: '₱75', priceUSD: '~$1.30 USD', priceDLs: '30 Diamond Locks', configs: '10 Config Slots' },
+      pkg_7d: { name: '7 Days Pass', pricePHP: '₱150', priceUSD: '~$2.60 USD', priceDLs: '50 Diamond Locks', configs: '25 Config Slots' },
+      pkg_lifetime: { name: 'Lifetime Pass', pricePHP: '₱300', priceUSD: '~$5.20 USD', priceDLs: '100 Diamond Locks', configs: 'Unlimited Configs' }
     };
 
     const pkg = packages[selected];
@@ -196,7 +196,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           }],
           components: [
             row(
-              btn(`pay_method:gcash:${selected}`, '🇵🇭 GCash / Maya', 3),
+              btn(`pay_method:gcash:${selected}`, '🇵🇭 GCash', 3),
               btn(`pay_method:paypal:${selected}`, '🅿️ PayPal', 1),
               btn(`pay_method:wise:${selected}`, '💸 Wise', 1),
               btn(`pay_method:dls:${selected}`, '💎 Diamond Locks', 2)
