@@ -65,7 +65,25 @@ function modal(mode, id, field, current) {
   if (field === 'delay') return delayModal(mode, id, current);
   const titles = { name: '✏️ Rename Configuration', channelId: '📍 Configure Target Channel ID', text: '💬 Define Dispatch Payload' };
   const labels = { name: 'Configuration Name', channelId: 'Destination Channel ID', text: 'Message Body' };
-  return { type: InteractionResponseType.MODAL, data: { custom_id: `modal:${mode}:${id}:${field}`, title: titles[field], components: [row({ type: 4, custom_id: 'value', label: labels[field], style: field === 'text' ? 2 : 1, min_length: 1, max_length: field === 'text' ? 1000 : 50, required: true, value: current != null ? String(current) : undefined })] } };
+  return {
+    type: InteractionResponseType.MODAL,
+    data: {
+      custom_id: `modal:${mode}:${id}:${field}`,
+      title: titles[field],
+      components: [
+        row({
+          type: 4,
+          custom_id: 'value',
+          label: labels[field],
+          style: field === 'text' ? 2 : 1,
+          min_length: 1,
+          max_length: field === 'text' ? 2000 : 50,
+          required: true,
+          value: current != null ? String(current) : undefined
+        })
+      ]
+    }
+  };
 }
 
 // --- REDESIGNED MAXPOST-STYLE SETUP WIZARD PANEL ---
