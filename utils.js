@@ -208,3 +208,35 @@ export function privateOverwrites(guildId, userId) {
 
   return overwrites;
 }
+
+export async function ensureController(guildId, userIdOrUser, store, saveStoreFn) {
+  const user = typeof userIdOrUser === 'string' ? { id: userIdOrUser, username: 'user' } : userIdOrUser;
+  const key = `${guildId}:${user.id}`;
+
+  if (store?.users?.[key]?.controllerChannelId) {
+    const existingId = store.users[key].controllerChannelId;
+    try {
+      await DiscordRequest(`channels/${existingId}`, { method: 'GET' });
+      return existingId;
+    } catch (e) {
+      // Channel missing or invalid; recreate below
+    }
+  }
+
+  const ch = await DiscordRequest(`guilds/${guildId}/channels`, {
+    method: 'POST',
+    body: {
+      name: `controller-${slug(user.username)}`,
+      type: 0,
+      parent_id: process.env.CONTROLLER_CATEGORY_ID,
+      permission_overwrites: privateOverwrites(guildId, user.id),
+    },
+  });
+
+  if (store) {
+    store.users[key] = { ...(store.users[key] || {}), controllerChannelId: ch.id };
+    if (saveStoreFn) saveStoreFn(store);
+    else saveStore(store);
+  }
+  return ch.id;
+}
