@@ -401,6 +401,23 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     });
   }
 
+  if (name === 'delete-all-configs') {
+    const mine = mineOf(guildId, user.id);
+    if (!mine.length) {
+      return notice(res, COLOR.amber, '📭 Zero Pipelines Found', 'You do not have any active or saved configurations to delete.');
+    }
+
+    return reply(res, {
+      content: `⚠️ **Danger Zone**: Are you sure you want to permanently delete **all ${mine.length}** of your configuration pipelines and their controller cards?`,
+      components: [
+        row(
+          btn(`confirm_delete_all:${guildId}`, 'Yes, Delete All', 4),
+          btn('delete_no', 'Abort', 2)
+        )
+      ]
+    });
+  }
+
   if (name === 'controller') {
     res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
     try {
