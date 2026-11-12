@@ -6,6 +6,7 @@ const commands = [
   { name: 'help', description: '🛡️ Show Command Center framework documentation.' },
   { name: 'status', description: '🟢 View system telemetry and security status.' },
   { name: 'list-configs', description: '📋 Display all active configuration pipelines.' },
+  { name: 'delete-all-configs', description: '🗑️ Permanently delete all of your configuration pipelines.' },
   { name: 'controller', description: '📂 Open or restore your secured Command Center channel.' },
   { name: 'stop-all', description: '⏹️ Emergency halt all active dispatch runners.' },
   {
