@@ -407,14 +407,19 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       return notice(res, COLOR.amber, '📭 Zero Pipelines Found', 'You do not have any active or saved configurations to delete.');
     }
 
-    return reply(res, {
-      content: `⚠️ **Danger Zone**: Are you sure you want to permanently delete **all ${mine.length}** of your configuration pipelines and their controller cards?`,
-      components: [
-        row(
-          btn(`confirm_delete_all:${guildId}`, 'Yes, Delete All', 4),
-          btn('delete_no', 'Abort', 2)
-        )
-      ]
+    // Respond immediately using standard source message response to prevent timeouts
+    return res.send({
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: {
+        content: `⚠️ **Danger Zone**: Are you sure you want to permanently delete **all ${mine.length}** of your configuration pipelines and their controller cards?`,
+        flags: 64,
+        components: [
+          row(
+            btn(`confirm_delete_all:${guildId}`, 'Yes, Delete All', 4),
+            btn('delete_no', 'Abort', 2)
+          )
+        ]
+      }
     });
   }
 
