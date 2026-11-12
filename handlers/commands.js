@@ -59,16 +59,6 @@ const helpEmbed = () => ({
         '• **`/add-config`** — Create a new automated posting configuration.',
     },
     {
-      name: '🔑 Administration & Management Tools',
-      value:
-        '• **`/store`** — Publish the official AutomateX license pricing and store showcase embed *(Admin)*.\n' +
-        '• **`/check-access`** — Verify subscription clearance and expiration status of a user *(Admin)*.\n' +
-        '• **`/grant-access`** — Authorize a user with a specific subscription duration tier *(Admin)*.\n' +
-        '• **`/revoke-access`** — Terminate clearance, purge credentials, and wipe user pipelines *(Admin)*.\n' +
-        '• **`/promotion`** — Broadcast the official AutomateX launch and setup announcement embed *(Admin)*.\n' +
-        '• **`/terms-of-service`** — Publish the official legal terms of service embed *(Admin)*.',
-    },
-    {
       name: '🧭 Server Guide & Channels',
       value:
         '• <#1567854828670025748> — Review our legal policies, safety heuristics, and terms of service.\n' +
