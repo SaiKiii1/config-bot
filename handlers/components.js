@@ -249,16 +249,20 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     }
   }
 
-  if (action === 'confirm_delete_all') {
+  if (data.custom_id === 'confirm_delete_all') {
+    // 1. Immediately acknowledge the interaction to prevent the 3s timeout
     await res.send({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 
     const mine = Object.entries(store.configs).filter(([, c]) => c.userId === user.id && c.guildId === guildId);
     let deletedCount = 0;
+    const deletePromises = [];
 
     for (const [cfgId, cfg] of mine) {
       if (cfg.running) stopRunner(cfgId, store);
       if (cfg.controllerChannelId && cfg.cardMessageId) {
-        DiscordRequest(`channels/${cfg.controllerChannelId}/messages/${cfg.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
+        deletePromises.push(
+          DiscordRequest(`channels/${cfg.controllerChannelId}/messages/${cfg.cardMessageId}`, { method: 'DELETE' }).catch(() => {})
+        );
       }
       delete store.configs[cfgId];
       deletedCount++;
@@ -268,7 +272,11 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       saveStore(store);
     }
 
-    return DiscordRequest(`webhooks/${req.body.application_id}/${token}/messages/@original`, {
+    // Wait for all card deletions to complete concurrently in the background
+    await Promise.allSettled(deletePromises);
+
+    // 2. Edit the original prompt using process.env.APP_ID
+    return DiscordRequest(`webhooks/${process.env.APP_ID}/${token}/messages/@original`, {
       method: 'PATCH',
       body: {
         content: `🗑️ **Workspace Cleared**: Successfully purged **${deletedCount}** configuration pipeline(s) and removed their controller cards.`,
