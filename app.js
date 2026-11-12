@@ -18,12 +18,10 @@ import { InteractionType, InteractionResponseType, verifyKeyMiddleware } from 'd
 import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential, cleanupExpiredDrafts } from './utils.js';
 import { startRunner, cleanupExpiredAccess } from './services/runner.js';
 import { handleCommand } from './handlers/commands.js';
-// We are importing cardPanel so app.js can actually generate and refresh the UI
 import { handleComponent, handleModalSubmit, cardPanel } from './handlers/components.js';
 import { sendWelcomeMessage } from './handlers/events.js';
 
 const app = express();
-// Align explicitly with Railway's 8080 port mapping
 const PORT = process.env.PORT || 8080;
 
 const store = await loadStore();
@@ -38,7 +36,6 @@ const COLOR = { blurple: 0x5865f2, green: 0x57f287, red: 0xed4245, grey: 0x4f545
 const row = (...components) => ({ type: 1, components });
 const btn = (custom_id, label, style = 2, disabled = false) => ({ type: 2, custom_id, label, style, disabled });
 const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-
 const unix = (ms) => Math.floor(ms / 1000);
 
 function fmtDelay(s) {
@@ -86,7 +83,6 @@ function modal(mode, id, field, current) {
   };
 }
 
-// --- REDESIGNED MAXPOST-STYLE SETUP WIZARD PANEL ---
 function setupPanel(id, d) {
   const hasChannel = Boolean(d.channelId);
   const hasDelay = Boolean(d.delay);
@@ -101,8 +97,6 @@ function setupPanel(id, d) {
   const stepText = complete ? 'READY' : `STEP ${currentStep} OF 3`;
   const statusBadge = complete ? '🟢 READY' : '🟠 IN PROGRESS';
   const lineCount = d.text ? d.text.split('\n').length : 0;
-
-  // Safe preview snippet capped at 300 characters to prevent embed field limit overflows
   const previewText = d.text ? clip(d.text, 300) : '*Pending...*';
 
   return {
@@ -114,10 +108,7 @@ function setupPanel(id, d) {
       fields: [
         { name: '📍 DESTINATION CHANNEL', value: hasChannel ? `<#${d.channelId}>` : '*Pending...*', inline: true },
         { name: '⏱️ FREQUENCY INTERVAL', value: hasDelay ? `Every ${fmtDelay(d.delay)}` : '*Pending...*', inline: true },
-        { 
-          name: '💬 PAYLOAD CONTENT', 
-          value: hasText ? `${lineCount} lines (${d.text.length} chars)\n> ${previewText}` : '*Pending...*' 
-        },
+        { name: '💬 PAYLOAD CONTENT', value: hasText ? `${lineCount} lines (${d.text.length} chars)\n> ${previewText}` : '*Pending...*' },
       ],
       footer: { text: 'AutomateX Setup Session expires in 10 minutes • Secure Wizard' },
       timestamp: new Date().toISOString()
@@ -150,27 +141,17 @@ async function ensureController(guildId, user) {
   return ch.id;
 }
 
-// FULLY FUNCTIONAL REPOST LOGIC
 async function repostCards(guildId, userId, controllerId) {
   let restored = 0;
   for (const [id, c] of mineOf(guildId, userId)) {
     let ok = c.controllerChannelId === controllerId && c.cardMessageId;
     if (ok) {
-      try { 
-        await DiscordRequest(`channels/${controllerId}/messages/${c.cardMessageId}`); 
-      } catch (e) { 
-        if (e.status === 404) ok = false; else throw e; 
-      }
+      try { await DiscordRequest(`channels/${controllerId}/messages/${c.cardMessageId}`); } catch (e) { if (e.status === 404) ok = false; else throw e; }
     }
-    
-    // Actually repost the visual card if it's missing!
     if (!ok) {
       c.controllerChannelId = controllerId;
       try {
-        const msg = await DiscordRequest(`channels/${controllerId}/messages`, {
-          method: 'POST',
-          body: cardPanel(id, c)
-        });
+        const msg = await DiscordRequest(`channels/${controllerId}/messages`, { method: 'POST', body: cardPanel(id, c) });
         c.cardMessageId = msg.id;
         restored++;
       } catch (err) {
@@ -182,23 +163,16 @@ async function repostCards(guildId, userId, controllerId) {
   return restored;
 }
 
-// FULLY FUNCTIONAL LIVE STATS REFRESHER
 const refreshCard = async (id) => {
   const c = store.configs[id];
   if (!c?.cardMessageId || !c?.controllerChannelId) return;
-  
-  // Actually edit the Discord message with live statistics!
   try {
-    await DiscordRequest(`channels/${c.controllerChannelId}/messages/${c.cardMessageId}`, {
-      method: 'PATCH',
-      body: cardPanel(id, c)
-    });
+    await DiscordRequest(`channels/${c.controllerChannelId}/messages/${c.cardMessageId}`, { method: 'PATCH', body: cardPanel(id, c) });
   } catch (err) {
     console.error(`Failed to refresh telemetry card ${id}:`, err.message);
   }
 };
 
-// Update the existing validate function
 async function validate(field, raw, guildId, userId) {
   if (field === 'name') return raw ? { value: raw.slice(0, 50) } : { error: 'Name cannot be blank.' };
   
@@ -244,7 +218,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
   if (type === InteractionType.APPLICATION_COMMAND) {
     const { name } = data;
     const userId = req.body.member?.user?.id || req.body.user?.id;
-    console.log(`[DEBUG] Received Command -> /${name} by userId: ${userId}`);
 
     if (name === 'terms-of-service') {
       if (!userId || userId !== process.env.ADMIN_ID) {
@@ -262,30 +235,12 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
             description: 'Welcome to AutomateX. By accessing, configuring, or interacting with AutomateX pipelines, automated modules, and token security vaults, you agree to abide by the following Terms of Service.',
             color: 0x3b82f6,
             fields: [
-              {
-                name: '1. Scope of Service & Educational Purpose',
-                value: 'AutomateX is designed and maintained strictly as an advanced automation, telemetry logging, and protocol analysis framework for research and community management.'
-              },
-              {
-                name: '2. User Account Responsibility & Security',
-                value: 'You are solely responsible for the security of your authentication tokens and credentials. Never share raw tokens with third parties.'
-              },
-              {
-                name: '3. Compliance & Platform Safety Heuristics',
-                value: 'Automators incorporate safety jitters, but operators assume full responsibility for compliance with target platform Terms of Service.'
-              },
-              {
-                name: '4. Prohibited Conduct',
-                value: 'Mass spamming, phishing, targeted harassment, or unauthorized access attempts will result in immediate termination of access.'
-              },
-              {
-                name: '5. Platform Advisory & Account Health',
-                value: 'While AutomateX uses smart pre-flight checks and humanized jitter, running automation on platforms like Discord involves strict platform-specific policies. To protect your standing, please use the system with care and avoid reckless setups—always opt for well-aged accounts to prevent unnecessary flags, bans, or suspensions!'
-              },
-              {
-                name: '6. Limitation of Liability',
-                value: 'Provided on an "as-is" basis. Developers are not liable for any platform-imposed account suspensions or token invalidations.'
-              }
+              { name: '1. Scope of Service & Educational Purpose', value: 'AutomateX is designed and maintained strictly as an advanced automation, telemetry logging, and protocol analysis framework for research and community management.' },
+              { name: '2. User Account Responsibility & Security', value: 'You are solely responsible for the security of your authentication tokens and credentials. Never share raw tokens with third parties.' },
+              { name: '3. Compliance & Platform Safety Heuristics', value: 'Automators incorporate safety jitters, but operators assume full responsibility for compliance with target platform Terms of Service.' },
+              { name: '4. Prohibited Conduct', value: 'Mass spamming, phishing, targeted harassment, or unauthorized access attempts will result in immediate termination of access.' },
+              { name: '5. Platform Advisory & Account Health', value: 'While AutomateX uses smart pre-flight checks and humanized jitter, running automation on platforms like Discord involves strict platform-specific policies. To protect your standing, please use the system with care and avoid reckless setups—always opt for well-aged accounts to prevent unnecessary flags, bans, or suspensions!' },
+              { name: '6. Limitation of Liability', value: 'Provided on an "as-is" basis. Developers are not liable for any platform-imposed account suspensions or token invalidations.' }
             ],
             footer: { text: 'AutomateX • Secure. Automated. Reliable.' },
             timestamp: new Date().toISOString()
@@ -303,9 +258,10 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
       }
     }
   } else if (type === InteractionType.MESSAGE_COMPONENT) {
-    handleComponent(req, res, store, save, lookup, modal, setupPanel, handleComponent, validate, parseDelay, refreshCard, editOriginal, btn, row).catch(console.error);
+    // CRITICAL FIX: Await handleComponent so Express doesn't drop the connection before res.send()
+    await handleComponent(req, res, store, save, lookup, modal, setupPanel, handleComponent, validate, parseDelay, refreshCard, editOriginal, btn, row).catch(console.error);
   } else if (type === InteractionType.MODAL_SUBMIT) {
-    handleModalSubmit(req, res, store, save, lookup, validate, parseDelay, refreshCard, setupPanel).catch(console.error);
+    await handleModalSubmit(req, res, store, save, lookup, validate, parseDelay, refreshCard, setupPanel).catch(console.error);
   } else {
     res.status(400).json({ error: 'unknown interaction' });
   }
@@ -326,11 +282,9 @@ app.listen(PORT, () => {
     if (c.running) startRunner(id, false, store, save, refreshCard);
   }
 
-  // Initial access & draft expiration sweeps on server startup
   cleanupExpiredAccess(store, save).catch(console.error);
   cleanupExpiredDrafts(store, save).catch(console.error);
 
-  // Periodic background sweep every 15 minutes (900,000 ms)
   setInterval(() => {
     cleanupExpiredAccess(store, save).catch(console.error);
     cleanupExpiredDrafts(store, save).catch(console.error);

@@ -81,15 +81,11 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     store.trials ??= {};
 
     if (store.trials[user.id]) {
-      return reply(res, {
-        content: '⚠️ **Free Trial Already Claimed**: You have already claimed your one-time 24-hour free trial for this account.\n\nIf you would like to continue using the AutomateX auto-post service, please purchase access by opening a ticket in the support channel!'
-      });
+      return reply(res, { content: '⚠️ **Free Trial Already Claimed**: You have already claimed your one-time 24-hour free trial for this account.\n\nIf you would like to continue using the AutomateX auto-post service, please purchase access by opening a ticket in the support channel!' });
     }
 
     if (store.access[user.id]) {
-      return reply(res, {
-        content: `ℹ️ **Active Access Detected**: You already have active security clearance (\`${store.access[user.id].durationLabel}\`). You do not need a free trial right now!`
-      });
+      return reply(res, { content: `ℹ️ **Active Access Detected**: You already have active security clearance (\`${store.access[user.id].durationLabel}\`). You do not need a free trial right now!` });
     }
 
     const now = Date.now();
@@ -97,11 +93,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     const expiresAt = now + DAY;
 
     store.trials[user.id] = { claimedAt: now };
-    store.access[user.id] = {
-      grantedAt: now,
-      expiresAt,
-      durationLabel: '24 Hours (Free Trial)'
-    };
+    store.access[user.id] = { grantedAt: now, expiresAt, durationLabel: '24 Hours (Free Trial)' };
     saveStore(store);
 
     if (guildId) {
@@ -115,20 +107,8 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
         title: '🎉 24-HOUR FREE TRIAL ACTIVATED!',
         description: `Congratulations <@${user.id}>! Your one-time 24-hour free trial has been successfully claimed.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
         fields: [
-          {
-            name: '⏰ Access Expiration',
-            value: `<t:${Math.floor(expiresAt / 1000)}:F> (<t:${Math.floor(expiresAt / 1000)}:R>)`,
-            inline: false
-          },
-          {
-            name: '🚀 NEXT STEPS & SETUP GUIDE',
-            value: 
-              '1️⃣ **Register Credential:** Run `/add-token register` to securely vault your account session token.\n' +
-              '2️⃣ **Provision Pipeline:** Run `/add-config name:MyFirstPost` to open your private setup workspace.\n' +
-              '3️⃣ **Command Center:** Control dispatches and view live metrics in your private controller channel.\n\n' +
-              '📌 *Need assistance? Visit <#1567854828670025748> for rules & policies or open a ticket to contact staff.*',
-            inline: false
-          }
+          { name: '⏰ Access Expiration', value: `<t:${Math.floor(expiresAt / 1000)}:F> (<t:${Math.floor(expiresAt / 1000)}:R>)`, inline: false },
+          { name: '🚀 NEXT STEPS & SETUP GUIDE', value: '1️⃣ **Register Credential:** Run `/add-token register` to securely vault your account session token.\n2️⃣ **Provision Pipeline:** Run `/add-config name:MyFirstPost` to open your private setup workspace.\n3️⃣ **Command Center:** Control dispatches and view live metrics in your private controller channel.\n\n📌 *Need assistance? Visit <#1567854828670025748> for rules & policies or open a ticket to contact staff.*', inline: false }
         ],
         footer: { text: 'AutomateX • 1-Time Free Trial System' },
         timestamp: new Date().toISOString()
@@ -178,21 +158,9 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
             fields: [
               { name: '📦 Selected Package', value: `\`${pkg.name}\``, inline: true },
               { name: '⚙️ Pipeline Capacity', value: `\`${pkg.configs}\``, inline: true },
-              { 
-                name: '💰 Price Options', 
-                value: `• **Local Currency:** ${pkg.pricePHP}\n• **USD International:** ${pkg.priceUSD}\n• **Growtopia:** ${pkg.priceDLs}`, 
-                inline: false 
-              },
-              {
-                name: '📜 IMPORTANT NOTICE',
-                value: 'Before you continue purchasing, please make sure you have thoroughly read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>).',
-                inline: false
-              },
-              { 
-                name: '💳 SELECT PAYMENT METHOD BELOW', 
-                value: 'Click a button below to view specific payment account details & instructions!', 
-                inline: false 
-              }
+              { name: '💰 Price Options', value: `• **Local Currency:** ${pkg.pricePHP}\n• **USD International:** ${pkg.priceUSD}\n• **Growtopia:** ${pkg.priceDLs}`, inline: false },
+              { name: '📜 IMPORTANT NOTICE', value: 'Before you continue purchasing, please make sure you have thoroughly read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>).', inline: false },
+              { name: '💳 SELECT PAYMENT METHOD BELOW', value: 'Click a button below to view specific payment account details & instructions!', inline: false }
             ],
             footer: { text: 'AutomateX Checkout Ticket • Select payment method to proceed' },
             timestamp: new Date().toISOString()
@@ -211,9 +179,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
         }
       });
 
-      await editOriginal(token, {
-        content: `✅ **Ticket Created!** Proceed to <#${ticketChannel.id}> to complete your order.`
-      });
+      await editOriginal(token, { content: `✅ **Ticket Created!** Proceed to <#${ticketChannel.id}> to complete your order.` });
     } catch (err) {
       console.error('[ERROR] Failed to create order ticket:', err);
       await editOriginal(token, { content: `⚠️ **Ticket Creation Failed**: ${err.message}` }).catch(() => {});
@@ -231,14 +197,8 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           embeds: [{
             color: COLOR.green,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: 
-              '🇵🇭 **GCash QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-              '• **Scan the QR code below** using your GCash app to complete payment.\n\n' +
-              '📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n' +
-              '📌 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
-            image: {
-              url: 'https://i.imgur.com/JHVxpgp.png'
-            },
+            description: '🇵🇭 **GCash QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Scan the QR code below** using your GCash app to complete payment.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
+            image: { url: 'https://i.imgur.com/JHVxpgp.png' },
             footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
           }]
         }
@@ -252,15 +212,8 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           embeds: [{
             color: COLOR.green,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: 
-              '🅿️ **PayPal International QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-              '• **Scan the QR code below** using your PayPal app to complete payment.\n' +
-              '• **Transfer Mode:** Friends & Family (F&F)\n\n' +
-              '📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n' +
-              '📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
-            image: {
-              url: 'https://i.imgur.com/XjZL7id.png'
-            },
+            description: '🅿️ **PayPal International QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Scan the QR code below** using your PayPal app to complete payment.\n• **Transfer Mode:** Friends & Family (F&F)\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
+            image: { url: 'https://i.imgur.com/XjZL7id.png' },
             footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
           }]
         }
@@ -274,12 +227,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           embeds: [{
             color: COLOR.blurple,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: 
-              '💸 **Wise International Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-              '• **Please wait for assistance from our admins.**\n' +
-              '• An administrator will respond in this ticket shortly to provide Wise payment details and assist you with your transfer.\n\n' +
-              '📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n' +
-              '📌 *Thank you for your patience!*',
+            description: '💸 **Wise International Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Please wait for assistance from our admins.**\n• An administrator will respond in this ticket shortly to provide Wise payment details and assist you with your transfer.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Thank you for your patience!*',
             footer: { text: 'AutomateX Checkout • Admin Assistance Required' }
           }]
         }
@@ -293,12 +241,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           embeds: [{
             color: COLOR.blurple,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: 
-              '💎 **Growtopia Diamond Locks (DLs) Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
-              '• **Please wait for assistance from our admins.**\n' +
-              '• An administrator will join this ticket shortly to provide the World Name, trade details, or meet you in-game.\n\n' +
-              '📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n' +
-              '📌 *Thank you for your patience!*',
+            description: '💎 **Growtopia Diamond Locks (DLs) Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Please wait for assistance from our admins.**\n• An administrator will join this ticket shortly to provide the World Name, trade details, or meet you in-game.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Thank you for your patience!*',
             footer: { text: 'AutomateX Checkout • Admin Assistance Required' }
           }]
         }
@@ -306,8 +249,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     }
   }
 
-  if (action === 'confirm_delete_all') {
-    // 1. Immediately tell Discord we are processing (prevents the 3s timeout)
+  if (data.custom_id === 'confirm_delete_all') {
     await res.send({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 
     const mine = Object.entries(store.configs).filter(([, c]) => c.userId === user.id && c.guildId === guildId);
@@ -316,7 +258,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     for (const [cfgId, cfg] of mine) {
       if (cfg.running) stopRunner(cfgId, store);
       if (cfg.controllerChannelId && cfg.cardMessageId) {
-        // Delete the cards asynchronously without blocking the main thread
         DiscordRequest(`channels/${cfg.controllerChannelId}/messages/${cfg.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
       }
       delete store.configs[cfgId];
@@ -327,8 +268,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       saveStore(store);
     }
 
-    // 2. Edit the original confirmation message with the final result
-    return DiscordRequest(`webhooks/${req.body.application_id}/${req.body.token}/messages/@original`, {
+    return DiscordRequest(`webhooks/${req.body.application_id}/${token}/messages/@original`, {
       method: 'PATCH',
       body: {
         content: `🗑️ **Workspace Cleared**: Successfully purged **${deletedCount}** configuration pipeline(s) and removed their controller cards.`,
@@ -340,13 +280,8 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
 
   if (data.custom_id?.startsWith('close_ticket:')) {
     const channelId = data.custom_id.split(':')[1];
-    res.send({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-      data: { content: '🔒 **Closing Ticket**: Purging channel in 5 seconds...' }
-    });
-    setTimeout(() => {
-      DiscordRequest(`channels/${channelId}`, { method: 'DELETE' }).catch(() => {});
-    }, 5000);
+    res.send({ type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE, data: { content: '🔒 **Closing Ticket**: Purging channel in 5 seconds...' } });
+    setTimeout(() => { DiscordRequest(`channels/${channelId}`, { method: 'DELETE' }).catch(() => {}); }, 5000);
     return;
   }
 
@@ -397,10 +332,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     if (store.credentials[user.id]?.[label]) {
       delete store.credentials[user.id][label];
       saveStore(store);
-      return res.send({
-        type: InteractionResponseType.UPDATE_MESSAGE,
-        data: { content: `🗑️ **Vault Updated**: Credential profile **${label}** successfully purged.`, embeds: [], components: [] },
-      });
+      return res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: { content: `🗑️ **Vault Updated**: Credential profile **${label}** successfully purged.`, embeds: [], components: [] } });
     }
     return ephemeral(res, '⚠️ Credential profile not found.');
   }
@@ -422,10 +354,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     if (!d || d.userId !== user.id) return notYours(res);
     delete store.drafts[id];
     saveStore(store);
-    res.send({
-      type: InteractionResponseType.UPDATE_MESSAGE,
-      data: { content: '', embeds: [{ color: COLOR.dark, title: '❌ Pipeline Aborted', description: 'Destroying setup channel in 5 seconds…' }], components: [] },
-    });
+    res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: { content: '', embeds: [{ color: COLOR.dark, title: '❌ Pipeline Aborted', description: 'Destroying setup channel in 5 seconds…' }], components: [] } });
     setTimeout(() => DiscordRequest(`channels/${id}`, { method: 'DELETE' }).catch(() => {}), 5000);
     return;
   }
