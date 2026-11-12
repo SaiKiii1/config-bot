@@ -307,12 +307,16 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
   }
 
   if (action === 'confirm_delete_all') {
+    // 1. Immediately tell Discord we are processing (prevents the 3s timeout)
+    await res.send({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+
     const mine = Object.entries(store.configs).filter(([, c]) => c.userId === user.id && c.guildId === guildId);
     let deletedCount = 0;
 
     for (const [cfgId, cfg] of mine) {
       if (cfg.running) stopRunner(cfgId, store);
       if (cfg.controllerChannelId && cfg.cardMessageId) {
+        // Delete the cards asynchronously without blocking the main thread
         DiscordRequest(`channels/${cfg.controllerChannelId}/messages/${cfg.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
       }
       delete store.configs[cfgId];
@@ -323,9 +327,10 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       saveStore(store);
     }
 
-    return res.send({
-      type: InteractionResponseType.UPDATE_MESSAGE,
-      data: {
+    // 2. Edit the original confirmation message with the final result
+    return DiscordRequest(`webhooks/${req.body.application_id}/${req.body.token}/messages/@original`, {
+      method: 'PATCH',
+      body: {
         content: `🗑️ **Workspace Cleared**: Successfully purged **${deletedCount}** configuration pipeline(s) and removed their controller cards.`,
         embeds: [],
         components: []
