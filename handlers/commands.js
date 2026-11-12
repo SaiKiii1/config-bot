@@ -113,28 +113,33 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
           description: 'Boost your server reach, traffic, and sales automatically 24/7 non-stop across targeted Discord channels!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
           fields: [
             {
-              name: '💎 OFFICIAL LICENSE PRICING',
-              value: 
-                '• 🎁 **24 Hours Free Trial:** ₱0 (~$0.00 USD) · FREE *(1-Time Claim • 5 Config Pipelines)*\n' +
-                '• 🥉 **3 Days Pass:** ₱30 (~$0.55 USD) · 10 Diamond Locks *(1 Account Slot • 10 Config Pipelines)*\n' +
-                '• 🥈 **7 Days Pass:** ₱60 (~$1.05 USD) · 20 Diamond Locks *(1 Account Slot • 25 Config Pipelines)*\n' +
-                '• 🥇 **1 Month Pass:** ₱150 (~$2.60 USD) · 50 Diamond Locks *(1 Account Slot • 50 Config Pipelines)*\n' +
-                '• 👑 **Lifetime Pass:** ₱300 (~$5.20 USD) · 100 Diamond Locks *(1 Account Slot • Unlimited Configs)*',
-              inline: false
+              name: '🥉 3 Days Pass',
+              value: '• **₱30** (~$0.55)\n• 10 DLs\n• 10 Configs',
+              inline: true
             },
             {
-              name: '💳 ACCEPTED PAYMENT METHODS',
-              value: 
-                '• 🇵🇭 **GCash**\n' +
-                '• 🅿️ **PayPal**\n' +
-                '• 💸 **Wise**\n' +
-                '• 💎 **Growtopia Diamond Locks (DLs)**\n\n' +
-                '📌 *Please open a ticket directly to complete your payment and request instant authorization.*',
-              inline: false
+              name: '🥈 7 Days Pass',
+              value: '• **₱60** (~$1.05)\n• 20 DLs\n• 25 Configs',
+              inline: true
             },
             {
-              name: '⚡ INSTANT ACTIVATION',
-              value: 'Licenses are manually reviewed and activated immediately upon ticket verification!',
+              name: '🥇 1 Month Pass',
+              value: '• **₱150** (~$2.60)\n• 50 DLs\n• 50 Configs',
+              inline: true
+            },
+            {
+              name: '👑 Lifetime Pass',
+              value: '• **₱300** (~$5.20)\n• 100 DLs\n• Unlimited',
+              inline: true
+            },
+            {
+              name: '🎁 Free Trial',
+              value: '• **FREE** (₱0)\n• 0 DLs (24h)\n• 5 Configs',
+              inline: true
+            },
+            {
+              name: '💳 Accepted Payment Methods',
+              value: '• 🇵🇭 **GCash**\n• 🅿️ **PayPal**\n• 💸 **Wise**\n• 💎 **Growtopia Diamond Locks (DLs)**\n\n📌 *Open a ticket below to complete your payment and request instant activation.*',
               inline: false
             }
           ],
