@@ -113,18 +113,17 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
           description: 'Boost your server reach, traffic, and sales automatically 24/7 non-stop across targeted Discord channels!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
           fields: [
             {
-              name: '💎 OFFICIAL LICENSE PRICING & TIERS',
+              name: '💎 OFFICIAL LICENSE PRICING',
               value: 
-                '• **🎁 24 Hours Free Trial** — `FREE` (1-Time Claim)\n' +
-                '  └ *5 Config Pipelines • 24-Hour Access*\n\n' +
-                '• **🥉 3 Days Pass** — `₱30` or `10 Diamond Locks`\n' +
-                '  └ *10 Config Slots • 1 Account Slot*\n\n' +
-                '• **🥈 7 Days Pass** — `₱60` or `20 Diamond Locks`\n' +
-                '  └ *25 Config Slots • 1 Account Slot*\n\n' +
-                '• **🥇 1 Month Pass** — `₱150` or `50 Diamond Locks`\n' +
-                '  └ *50 Config Slots • 1 Account Slot*\n\n' +
-                '• **👑 Lifetime Pass** — `₱300` or `100 Diamond Locks`\n' +
-                '  └ *Unlimited Configs • Permanent Access*',
+                '```text\n' +
+                'Package    Price    Diamond Locks   Configs\n' +
+                '───────────────────────────────────────────\n' +
+                '🎁 Free    FREE     0 DLs (24h)     5 Slots\n' +
+                '🥉 3 Days  ₱30      10 DLs          10 Slots\n' +
+                '🥈 7 Days  ₱60      20 DLs          25 Slots\n' +
+                '🥇 1 Mon   ₱150     50 DLs          50 Slots\n' +
+                '👑 Life    ₱300     100 DLs         Unlimited\n' +
+                '```',
               inline: false
             },
             {
@@ -359,7 +358,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       if (!userCreds.length) return ephemeral(res, '⚠️ Vault is currently empty. No credentials to purge.');
       return reply(res, {
         content: '🗑️ **Security Vault Purge**: Select credential profile to permanently remove:',
-        components: [row(...userCreds.slice(0, 5).map((label) => btn(`cred:remove:${label}`, `Purge: ${label}`, 4)))],
+        components: [row(...userCreds.slice(0, 5).map((label) => btn(`cred:remove:${label}`, `Purge: ${label}, 4`)))],
       });
     }
   }
