@@ -38,7 +38,6 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       if (access && access.expiresAt !== 'permanent' && now > access.expiresAt) {
         const targetUser = currentConfig.userId;
         
-        // Close WebSocket connection to prevent memory leaks
         stopUserClient(targetUser);
 
         delete store.access[targetUser];
@@ -88,7 +87,6 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     }
 
     try {
-      // Use unified client manager to fetch the active connection
       const client = await getUserClient(currentConfig.userId, activeToken);
 
       const channel = await client.channels.fetch(currentConfig.channelId);
@@ -102,7 +100,13 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       
       currentConfig.sent = (currentConfig.sent ?? 0) + 1;
       currentConfig.lastSentAt = Date.now();
-      if (currentConfig.sent % 10 === 0) saveStore(store);
+      currentConfig.lastError = null; // Clear previous error on successful dispatch
+      
+      // PERSIST & UPDATE CONTROLLER CARD LIVE
+      saveStore(store);
+      if (refreshCardCallback) {
+        refreshCardCallback(id).catch(() => {});
+      }
 
       scheduleNext(currentConfig.delay);
 
@@ -146,7 +150,6 @@ export function stopAllRunnersForUser(guildId, userId, store, saveStore, refresh
   return mine;
 }
 
-// AUTOMATED BACKGROUND EXPIRATION SWEEPER
 export async function cleanupExpiredAccess(store, saveStore) {
   const now = Date.now();
   let updated = false;
