@@ -35,16 +35,38 @@ function getMaxConfigs(userId, store) {
 }
 
 const helpEmbed = () => ({
-  color: COLOR.blurple,
+  color: 0x5865f2,
   title: '🛡️ AutomateX — Command Center & Guide',
   description: 'Enterprise-grade Discord automation framework featuring humanized dispatch and secure credential vaulting.',
   fields: [
     {
       name: '📋 Operational Workflow',
       value:
-        '1️⃣ **`/add-token register`** — Register your single account token.\n' +
-        '2️⃣ **`/add-config name`** — Provision an isolated configuration pipeline.\n' +
+        '1️⃣ **`/add-token register`** — Register your single account token securely.\n' +
+        '2️⃣ **`/add-config name`** — Provision an isolated configuration pipeline workspace.\n' +
         '3️⃣ **Controller Panel** — Execute, test, and manage active dispatches.',
+    },
+    {
+      name: '⚙️ Core User Commands',
+      value:
+        '• **`/help`** — Display this documentation and system guide.\n' +
+        '• **`/status`** — View your system telemetry, credential status, and clearance.\n' +
+        '• **`/list-configs`** — See all of your active and saved configuration pipelines.\n' +
+        '• **`/delete-all-configs`** — Permanently purge all of your configuration pipelines and controller cards.\n' +
+        '• **`/controller`** — Open or restore your private secured Command Center channel.\n' +
+        '• **`/stop-all`** — Emergency halt all of your running configuration pipelines at once.\n' +
+        '• **`/add-token`** — Register, list, or purge your account session credentials.\n' +
+        '• **`/add-config`** — Create a new automated posting configuration.',
+    },
+    {
+      name: '🔑 Administration & Management Tools',
+      value:
+        '• **`/store`** — Publish the official AutomateX license pricing and store showcase embed *(Admin)*.\n' +
+        '• **`/check-access`** — Verify subscription clearance and expiration status of a user *(Admin)*.\n' +
+        '• **`/grant-access`** — Authorize a user with a specific subscription duration tier *(Admin)*.\n' +
+        '• **`/revoke-access`** — Terminate clearance, purge credentials, and wipe user pipelines *(Admin)*.\n' +
+        '• **`/promotion`** — Broadcast the official AutomateX launch and setup announcement embed *(Admin)*.\n' +
+        '• **`/terms-of-service`** — Publish the official legal terms of service embed *(Admin)*.',
     },
     {
       name: '🧭 Server Guide & Channels',
@@ -53,10 +75,11 @@ const helpEmbed = () => ({
         '• <#1567187360733601833> — Read community guidelines and core server rules.\n' +
         '• <#1567211746953797743> — Stay updated with official system updates and announcements.\n' +
         '• <#1567212596061540552> — A dedicated space to chat, converse, and hang out with other members.\n' +
-        '• <#1567212628386783242> — The recommended channel for executing bot and slash commands to keep things clean and organized.',
+        '• <#1567212628386783242> — The recommended channel for executing bot and slash commands.',
     },
   ],
   footer: { text: 'AutomateX • Secure. Automated. Reliable.' },
+  timestamp: new Date().toISOString()
 });
 
 export function credentialInputModal() {
