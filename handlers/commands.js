@@ -113,33 +113,23 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
           description: 'Boost your server reach, traffic, and sales automatically 24/7 non-stop across targeted Discord channels!\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
           fields: [
             {
-              name: '🥉 3 Days Pass',
-              value: '• **₱30** (~$0.55)\n• 10 DLs\n• 10 Configs',
-              inline: true
+              name: '💎 OFFICIAL LICENSE PRICING & TIERS',
+              value: 
+                '• **🎁 24 Hours Free Trial** — `FREE` (1-Time Claim)\n' +
+                '  └ *5 Config Pipelines • 24-Hour Access*\n\n' +
+                '• **🥉 3 Days Pass** — `₱30` or `10 Diamond Locks`\n' +
+                '  └ *10 Config Slots • 1 Account Slot*\n\n' +
+                '• **🥈 7 Days Pass** — `₱60` or `20 Diamond Locks`\n' +
+                '  └ *25 Config Slots • 1 Account Slot*\n\n' +
+                '• **🥇 1 Month Pass** — `₱150` or `50 Diamond Locks`\n' +
+                '  └ *50 Config Slots • 1 Account Slot*\n\n' +
+                '• **👑 Lifetime Pass** — `₱300` or `100 Diamond Locks`\n' +
+                '  └ *Unlimited Configs • Permanent Access*',
+              inline: false
             },
             {
-              name: '🥈 7 Days Pass',
-              value: '• **₱60** (~$1.05)\n• 20 DLs\n• 25 Configs',
-              inline: true
-            },
-            {
-              name: '🥇 1 Month Pass',
-              value: '• **₱150** (~$2.60)\n• 50 DLs\n• 50 Configs',
-              inline: true
-            },
-            {
-              name: '👑 Lifetime Pass',
-              value: '• **₱300** (~$5.20)\n• 100 DLs\n• Unlimited',
-              inline: true
-            },
-            {
-              name: '🎁 Free Trial',
-              value: '• **FREE** (₱0)\n• 0 DLs (24h)\n• 5 Configs',
-              inline: true
-            },
-            {
-              name: '💳 Accepted Payment Methods',
-              value: '• 🇵🇭 **GCash**\n• 🅿️ **PayPal**\n• 💸 **Wise**\n• 💎 **Growtopia Diamond Locks (DLs)**\n\n📌 *Open a ticket below to complete your payment and request instant activation.*',
+              name: '💳 ACCEPTED PAYMENT METHODS',
+              value: '• 🇵🇭 **GCash**\n• 🅿️ **PayPal**\n• 💸 **Wise**\n• 💎 **Growtopia Diamond Locks (DLs)**\n\n📌 *Please open a ticket below to complete your payment and request instant authorization.*',
               inline: false
             }
           ],
