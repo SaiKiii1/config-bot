@@ -26,6 +26,7 @@ function getMaxConfigs(userId, store) {
 
   const label = access.durationLabel || '';
   if (label.includes('Permanent') || label.includes('Lifetime')) return Infinity;
+  if (label.includes('1 Month')) return 50;
   if (label.includes('7 Days') || label.includes('1 Week')) return 25;
   if (label.includes('3 Days')) return 10;
   if (label.includes('Free Trial') || label.includes('24 Hours')) return 5;
@@ -115,9 +116,10 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
               name: '💎 OFFICIAL LICENSE PRICING',
               value: 
                 '• 🎁 **24 Hours Free Trial:** ₱0 (~$0.00 USD) · FREE *(1-Time Claim • 5 Config Pipelines)*\n' +
-                '• 🥉 **3 Days Pass:** ₱75 (~$1.30 USD) · 30 Diamond Locks *(1 Account Slot • 10 Config Pipelines)*\n' +
-                '• 🥈 **7 Days Pass:** ₱150 (~$2.60 USD) · 50 Diamond Locks *(1 Account Slot • 25 Config Pipelines)*\n' +
-                '• 🥇 **Lifetime Pass:** ₱300 (~$5.20 USD) · 100 Diamond Locks *(1 Account Slot • Unlimited Configs)*',
+                '• 🥉 **3 Days Pass:** ₱30 (~$0.55 USD) · 10 Diamond Locks *(1 Account Slot • 10 Config Pipelines)*\n' +
+                '• 🥈 **7 Days Pass:** ₱60 (~$1.05 USD) · 20 Diamond Locks *(1 Account Slot • 25 Config Pipelines)*\n' +
+                '• 🥇 **1 Month Pass:** ₱150 (~$2.60 USD) · 50 Diamond Locks *(1 Account Slot • 50 Config Pipelines)*\n' +
+                '• 👑 **Lifetime Pass:** ₱300 (~$5.20 USD) · 100 Diamond Locks *(1 Account Slot • Unlimited Configs)*',
               inline: false
             },
             {
@@ -148,8 +150,9 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
                 custom_id: 'store_select_package',
                 placeholder: '💳 Click here to view package details...',
                 options: [
-                  { label: '3 Days Pass', value: 'pkg_3d', description: '₱75 (~$1.30 USD) / 30 DLs • 10 Config Slots', emoji: { name: '🥉' } },
-                  { label: '7 Days Pass', value: 'pkg_7d', description: '₱150 (~$2.60 USD) / 50 DLs • 25 Config Slots', emoji: { name: '🥈' } },
+                  { label: '3 Days Pass', value: 'pkg_3d', description: '₱30 (~$0.55 USD) / 10 DLs • 10 Config Slots', emoji: { name: '🥉' } },
+                  { label: '7 Days Pass', value: 'pkg_7d', description: '₱60 (~$1.05 USD) / 20 DLs • 25 Config Slots', emoji: { name: '🥈' } },
+                  { label: '1 Month Pass', value: 'pkg_1m', description: '₱150 (~$2.60 USD) / 50 DLs • 50 Config Slots', emoji: { name: '🥇' } },
                   { label: 'Lifetime Pass', value: 'pkg_lifetime', description: '₱300 (~$5.20 USD) / 100 DLs • Unlimited Configs', emoji: { name: '👑' } }
                 ]
               }
@@ -488,7 +491,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       // --- 10-MINUTE AUTOMATIC EXPIRATION TIMER ---
       const EXPIRATION_MS = 10 * 60 * 1000;
       setTimeout(async () => {
-        // If the draft still exists in store (meaning user hasn't confirmed or cancelled it)
         if (store.drafts[setup.id]) {
           console.log(`[AUTOCLEAN] Setup workspace ${setup.id} timed out after 10m. Destroying...`);
           delete store.drafts[setup.id];
