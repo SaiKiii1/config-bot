@@ -183,6 +183,11 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
                 value: `• **Local Currency:** ${pkg.pricePHP}\n• **USD International:** ${pkg.priceUSD}\n• **Growtopia:** ${pkg.priceDLs}`, 
                 inline: false 
               },
+              {
+                name: '📜 IMPORTANT NOTICE',
+                value: 'Before you continue purchasing, please make sure you have thoroughly read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>).',
+                inline: false
+              },
               { 
                 name: '💳 SELECT PAYMENT METHOD BELOW', 
                 value: 'Click a button below to view specific payment account details & instructions!', 
@@ -229,6 +234,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
             description: 
               '🇵🇭 **GCash QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
               '• **Scan the QR code below** using your GCash app to complete payment.\n\n' +
+              '📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n' +
               '📌 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
             image: {
               url: 'https://i.imgur.com/JHVxpgp.png'
@@ -250,6 +256,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
               '🅿️ **PayPal International QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
               '• **Scan the QR code below** using your PayPal app to complete payment.\n' +
               '• **Transfer Mode:** Friends & Family (F&F)\n\n' +
+              '📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n' +
               '📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
             image: {
               url: 'https://i.imgur.com/XjZL7id.png'
@@ -271,6 +278,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
               '💸 **Wise International Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
               '• **Please wait for assistance from our admins.**\n' +
               '• An administrator will respond in this ticket shortly to provide Wise payment details and assist you with your transfer.\n\n' +
+              '📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n' +
               '📌 *Thank you for your patience!*',
             footer: { text: 'AutomateX Checkout • Admin Assistance Required' }
           }]
@@ -289,6 +297,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
               '💎 **Growtopia Diamond Locks (DLs) Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n' +
               '• **Please wait for assistance from our admins.**\n' +
               '• An administrator will join this ticket shortly to provide the World Name, trade details, or meet you in-game.\n\n' +
+              '📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n' +
               '📌 *Thank you for your patience!*',
             footer: { text: 'AutomateX Checkout • Admin Assistance Required' }
           }]
