@@ -306,6 +306,33 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     }
   }
 
+  if (action === 'confirm_delete_all') {
+    const mine = Object.entries(store.configs).filter(([, c]) => c.userId === user.id && c.guildId === guildId);
+    let deletedCount = 0;
+
+    for (const [cfgId, cfg] of mine) {
+      if (cfg.running) stopRunner(cfgId, store);
+      if (cfg.controllerChannelId && cfg.cardMessageId) {
+        DiscordRequest(`channels/${cfg.controllerChannelId}/messages/${cfg.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
+      }
+      delete store.configs[cfgId];
+      deletedCount++;
+    }
+
+    if (deletedCount > 0) {
+      saveStore(store);
+    }
+
+    return res.send({
+      type: InteractionResponseType.UPDATE_MESSAGE,
+      data: {
+        content: `🗑️ **Workspace Cleared**: Successfully purged **${deletedCount}** configuration pipeline(s) and removed their controller cards.`,
+        embeds: [],
+        components: []
+      }
+    });
+  }
+
   if (data.custom_id?.startsWith('close_ticket:')) {
     const channelId = data.custom_id.split(':')[1];
     res.send({
