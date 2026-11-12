@@ -141,8 +141,9 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
 
     const selected = data.values?.[0];
     const packages = {
-      pkg_3d: { name: '3 Days Pass', pricePHP: '₱75', priceUSD: '~$1.30 USD', priceDLs: '30 Diamond Locks', configs: '10 Config Slots' },
-      pkg_7d: { name: '7 Days Pass', pricePHP: '₱150', priceUSD: '~$2.60 USD', priceDLs: '50 Diamond Locks', configs: '25 Config Slots' },
+      pkg_3d: { name: '3 Days Pass', pricePHP: '₱30', priceUSD: '~$0.55 USD', priceDLs: '10 Diamond Locks', configs: '10 Config Slots' },
+      pkg_7d: { name: '7 Days Pass', pricePHP: '₱60', priceUSD: '~$1.05 USD', priceDLs: '20 Diamond Locks', configs: '25 Config Slots' },
+      pkg_1m: { name: '1 Month Pass', pricePHP: '₱150', priceUSD: '~$2.60 USD', priceDLs: '50 Diamond Locks', configs: '50 Config Slots' },
       pkg_lifetime: { name: 'Lifetime Pass', pricePHP: '₱300', priceUSD: '~$5.20 USD', priceDLs: '100 Diamond Locks', configs: 'Unlimited Configs' }
     };
 
