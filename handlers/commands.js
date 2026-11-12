@@ -116,13 +116,13 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
               name: '💎 OFFICIAL LICENSE PRICING',
               value: 
                 '```text\n' +
-                'Package    Price    Diamond Locks   Configs\n' +
-                '───────────────────────────────────────────\n' +
-                '🎁 Free    FREE     0 DLs (24h)     5 Slots\n' +
-                '🥉 3 Days  ₱30      10 DLs          10 Slots\n' +
-                '🥈 7 Days  ₱60      20 DLs          25 Slots\n' +
-                '🥇 1 Mon   ₱150     50 DLs          50 Slots\n' +
-                '👑 Life    ₱300     100 DLs         Unlimited\n' +
+                'Package     Price (PHP/USD)   Diamond Locks   Configs\n' +
+                '───────────────────────────────────────────────────────\n' +
+                '🎁 Free     FREE ($0.00)      0 DLs (24h)     5 Slots\n' +
+                '🥉 3 Days   ₱30 (~$0.55)      10 DLs          10 Slots\n' +
+                '🥈 7 Days   ₱60 (~$1.05)      20 DLs          25 Slots\n' +
+                '🥇 1 Month  ₱150 (~$2.60)     50 DLs          50 Slots\n' +
+                '👑 Lifetime ₱300 (~$5.20)     100 DLs         Unlimited\n' +
                 '```',
               inline: false
             },
@@ -358,7 +358,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       if (!userCreds.length) return ephemeral(res, '⚠️ Vault is currently empty. No credentials to purge.');
       return reply(res, {
         content: '🗑️ **Security Vault Purge**: Select credential profile to permanently remove:',
-        components: [row(...userCreds.slice(0, 5).map((label) => btn(`cred:remove:${label}`, `Purge: ${label}, 4`)))],
+        components: [row(...userCreds.slice(0, 5).map((label) => btn(`cred:remove:${label}`, `Purge: ${label}`, 4)))],
       });
     }
   }
