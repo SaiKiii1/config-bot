@@ -249,7 +249,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     }
   }
 
-  if (data.custom_id === 'confirm_delete_all') {
+  if (action === 'confirm_delete_all') {
     await res.send({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
 
     const mine = Object.entries(store.configs).filter(([, c]) => c.userId === user.id && c.guildId === guildId);
