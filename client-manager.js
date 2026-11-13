@@ -3,10 +3,9 @@ import { Client } from 'discord.js-selfbot-v13';
 import { ProxyAgent } from 'undici';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
-const activeClients = new Map(); // Stores { client, token } per user
+const activeClients = new Map();
 const BASE_PROXY_URL = process.env.RESIDENTIAL_PROXY_URL;
 
-// Dynamically generate a sticky session proxy URL per user
 function getUserProxy(userId) {
   if (!BASE_PROXY_URL) return undefined;
   try {
@@ -22,21 +21,12 @@ function getUserProxy(userId) {
 }
 
 export async function getUserClient(userId, token) {
-  // If an active client exists, check if the token changed
+  // Always ensure a clean teardown if a client exists, forcing a fresh login with the current token
   if (activeClients.has(userId)) {
     const session = activeClients.get(userId);
-    
-    // If the token matches and the client is ready, reuse it
-    if (session.token === token && session.client.isReady()) {
-      return session.client;
-    }
-    
-    // Otherwise, destroy the old client because the token was updated or session dropped
     try {
       await session.client.destroy();
-    } catch (e) {
-      // Ignore destruction errors
-    }
+    } catch (e) {}
     activeClients.delete(userId);
   }
 
@@ -52,12 +42,9 @@ export async function getUserClient(userId, token) {
     }
   });
 
-  // Prevent individual WebSocket drops from crashing the main Node process
   client.on('error', (err) => console.error(`[User ${userId}] WebSocket Error:`, err.message));
 
   await client.login(token);
-  
-  // Store both the client instance and its associated token
   activeClients.set(userId, { client, token });
   return client;
 }
