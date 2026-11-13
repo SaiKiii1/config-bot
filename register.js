@@ -29,6 +29,13 @@ const commands = [
     options: [{ type: 3, name: 'name', description: 'Pipeline reference name', required: true }]
   },
   {
+    name: 'set-trial-duration',
+    description: '🛠️ (Admin) Set the duration of the free trial in days.',
+    options: [
+      { type: 4, name: 'days', description: 'Number of days for the free trial', required: true }
+    ]
+  },
+  {
     name: 'check-access',
     description: '🔍 (Admin) Check subscription clearance, duration, and expiration status of a user.',
     options: [
