@@ -1,6 +1,6 @@
 // handlers/components.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
-import { DiscordRequest, encryptCredential, decryptCredential, redactToken, manageRole, slug, privateOverwrites } from '../utils.js';
+import { DiscordRequest, encryptCredential, decryptCredential, redactToken, manageRole, slug, privateOverwrites, sendDM } from '../utils.js';
 import { startRunner, stopRunner } from '../services/runner.js';
 import { getUserClient } from '../client-manager.js';
 
@@ -106,7 +106,8 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       await manageRole(guildId, user.id, process.env.MEMBER_ROLE_ID, 'DELETE').catch(() => {});
     }
 
-    return reply(res, {
+    // Send direct message confirmation to user inbox
+    await sendDM(user.id, {
       embeds: [{
         color: COLOR.green,
         title: `🎉 ${trialDays}-DAY FREE TRIAL ACTIVATED!`,
@@ -118,6 +119,10 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
         footer: { text: `AutomateX • 1-Time ${trialDays}-Day Free Trial System` },
         timestamp: new Date().toISOString()
       }]
+    }).catch(() => {});
+
+    return reply(res, {
+      content: `✅ **Free Trial Activated!** Check your Direct Messages (DMs) for your confirmation details and expiration status.`
     });
   }
 
