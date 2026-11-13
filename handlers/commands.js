@@ -29,12 +29,12 @@ function getMaxConfigs(userId, store) {
   if (label.includes('1 Month')) return 50;
   if (label.includes('7 Days') || label.includes('1 Week')) return 25;
   if (label.includes('3 Days')) return 10;
-  if (label.includes('Free Trial') || label.includes('24 Hours')) return 5;
+  if (label.includes('Free Trial') || label.includes('24 Hours') || label.includes('Days (Free Trial)')) return 5;
 
   return 5;
 }
 
-const helpEmbed = () => ({
+const helpEmbed = (trialDays = 7) => ({
   color: 0x5865f2,
   title: '🛡️ AutomateX — Command Center & Guide',
   description: 'Enterprise-grade Discord automation framework featuring humanized dispatch and secure credential vaulting.',
@@ -59,6 +59,17 @@ const helpEmbed = () => ({
         '• **`/add-config`** — Create a new automated posting configuration.',
     },
     {
+      name: '🔑 Administration & Management Tools',
+      value:
+        '• **`/store`** — Publish the official AutomateX license pricing and store showcase embed *(Admin)*.\n' +
+        '• **`/set-trial-duration`** — Configure the active free trial duration in days *(Admin)*.\n' +
+        '• **`/check-access`** — Verify subscription clearance and expiration status of a user *(Admin)*.\n' +
+        '• **`/grant-access`** — Authorize a user with a specific subscription duration tier *(Admin)*.\n' +
+        '• **`/revoke-access`** — Terminate clearance, purge credentials, and wipe user pipelines *(Admin)*.\n' +
+        '• **`/promotion`** — Broadcast the official AutomateX launch and setup announcement embed *(Admin)*.\n' +
+        '• **`/terms-of-service`** — Publish the official legal terms of service embed *(Admin)*.',
+    },
+    {
       name: '🧭 Server Guide & Channels',
       value:
         '• <#1567854828670025748> — Review our legal policies, safety heuristics, and terms of service.\n' +
@@ -68,7 +79,7 @@ const helpEmbed = () => ({
         '• <#1567212628386783242> — The recommended channel for executing bot and slash commands.',
     },
   ],
-  footer: { text: 'AutomateX • Secure. Automated. Reliable.' },
+  footer: { text: `AutomateX • Current Trial Duration: ${trialDays} Days` },
   timestamp: new Date().toISOString()
 });
 
@@ -91,14 +102,20 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   const user = req.body.member?.user ?? req.body.user;
   const guildId = req.body.guild_id;
   const { name } = data;
+  const options = data.options ?? [];
   
   const ADMIN_ID = process.env.ADMIN_ID;
 
-  if (name === 'help') return reply(res, { embeds: [helpEmbed()] });
+  // Ensure settings & defaults exist
+  store.settings ??= {};
+  store.settings.trialDurationDays ??= 7;
+  const trialDays = store.settings.trialDurationDays;
+
+  if (name === 'help') return reply(res, { embeds: [helpEmbed(trialDays)] });
   if (!guildId) return ephemeral(res, '⚠️ **Context Error**: Command execution restricted to guild servers.');
 
   // --- AUTHORIZATION GATE ---
-  if (name !== 'grant-access' && name !== 'revoke-access' && name !== 'promotion' && name !== 'store') {
+  if (name !== 'grant-access' && name !== 'revoke-access' && name !== 'promotion' && name !== 'store' && name !== 'set-trial-duration') {
     const access = store.access[user.id];
     const now = Date.now();
     
@@ -111,6 +128,21 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         return notice(res, COLOR.red, '🚫 Clearance Required', 'You do not have active security clearance to operate this framework. Please contact the administrator.');
       }
     }
+  }
+
+  // --- SET TRIAL DURATION COMMAND (ADMIN ONLY) ---
+  if (name === 'set-trial-duration') {
+    if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
+    
+    const daysOpt = options.find((o) => o.name === 'days')?.value;
+    if (!daysOpt || daysOpt <= 0) {
+      return ephemeral(res, '⚠️ Please provide a valid number of days greater than 0.');
+    }
+
+    store.settings.trialDurationDays = daysOpt;
+    saveStore(store);
+
+    return notice(res, COLOR.green, '✅ Trial Duration Updated', `New free trial duration has been successfully set to **${daysOpt} day(s)**.`);
   }
 
   // --- STORE DISPLAY COMMAND (ADMIN ONLY) ---
@@ -129,13 +161,13 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
               name: '💎 OFFICIAL LICENSE PRICING',
               value: 
                 '```text\n' +
-                'Package     Price (PHP/USD)   Diamond Locks   Configs\n' +
+                'Package    Price (PHP/USD)   Diamond Locks   Configs\n' +
                 '───────────────────────────────────────────────────────\n' +
-                '🎁 Free     FREE ($0.00)      0 DLs (24h)     5 Slots\n' +
-                '🥉 3 Days   ₱30 (~$0.55)      10 DLs          10 Slots\n' +
-                '🥈 7 Days   ₱60 (~$1.05)      20 DLs          25 Slots\n' +
-                '🥇 1 Month  ₱150 (~$2.60)     50 DLs          50 Slots\n' +
-                '👑 Lifetime ₱300 (~$5.20)     100 DLs         Unlimited\n' +
+                `🎁 Free    FREE ($0.00)      0 DLs (${trialDays}d)     5 Slots\n` +
+                '🥉 3 Days  ₱30 (~$0.55)      10 DLs          10 Slots\n' +
+                '🥈 7 Days  ₱60 (~$1.05)      20 DLs          25 Slots\n' +
+                '🥇 1 Month ₱150 (~$2.60)     50 DLs          50 Slots\n' +
+                '👑 Lifetime ₱300 (~$5.20)    100 DLs         Unlimited\n' +
                 '```',
               inline: false
             },
@@ -168,7 +200,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
           {
             type: 1,
             components: [
-              { type: 2, custom_id: 'store_free_trial', label: '🎁 Free Trial (24h)', style: 3 },
+              { type: 2, custom_id: 'store_free_trial', label: `🎁 Free Trial (${trialDays}d)`, style: 3 },
               { type: 2, custom_id: 'store_guide', label: '📖 Guide (EN)', style: 2 },
               { type: 2, custom_id: 'store_features', label: '⚡ Core Features', style: 2 }
             ]
@@ -181,7 +213,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   // --- CHECK ACCESS (ADMIN ONLY) ---
   if (name === 'check-access') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
-    const targetUser = data.options?.find(o => o.name === 'target')?.value;
+    const targetUser = options.find(o => o.name === 'target')?.value || options.find(o => o.name === 'user')?.value;
     const accessRecord = store.access[targetUser];
 
     if (!accessRecord) {
@@ -257,7 +289,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
             },
             {
               name: '📌 HOW TO GET STARTED',
-              value: '1. Head over to <#1567206278579621888> and click **Create ticket** to purchase access.\n2. Once your subscription is verified by our staff, your access will be granted.\n3. Run `/add-token register` to securely vault your account.\n4. Provision your pipeline using `/add-config`.\n5. Manage your active posts in your private Command Center.',
+              value: '1. Head over to our store channel and claim your free trial pass.\n2. Once verified by our staff or system, your access will be granted.\n3. Run `/add-token register` to securely vault your account.\n4. Provision your pipeline using `/add-config`.\n5. Manage your active posts in your private Command Center.',
               inline: false
             }
           ],
@@ -272,8 +304,8 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   // --- ACCESS MANAGEMENT (ADMIN ONLY) ---
   if (name === 'grant-access') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
-    const targetUser = data.options.find(o => o.name === 'user').value;
-    const duration = data.options.find(o => o.name === 'duration').value;
+    const targetUser = options.find(o => o.name === 'user').value;
+    const duration = options.find(o => o.name === 'duration').value;
     
     let expiresAt;
     let label;
@@ -283,16 +315,18 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     switch(duration) {
       case '24h': expiresAt = now + DAY; label = '24 Hours'; break;
       case '3d': expiresAt = now + (3 * DAY); label = '3 Days'; break;
+      case '7d': expiresAt = now + (7 * DAY); label = '7 Days'; break;
       case '1w': expiresAt = now + (7 * DAY); label = '1 Week'; break;
       case '1m': expiresAt = now + (30 * DAY); label = '1 Month'; break;
+      case 'lifetime': expiresAt = 'permanent'; label = 'Lifetime Pass'; break;
       case 'perm': expiresAt = 'permanent'; label = 'Permanent'; break;
     }
 
     store.access[targetUser] = { grantedAt: now, expiresAt, durationLabel: label };
     saveStore(store);
 
-    await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'PUT');
-    await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'DELETE');
+    await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'PUT').catch(() => {});
+    await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'DELETE').catch(() => {});
 
     sendDM(targetUser, {
       embeds: [{
@@ -307,8 +341,8 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
 
   if (name === 'revoke-access') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
-    const targetUser = data.options.find(o => o.name === 'user').value;
-    const reasonOpt = data.options.find(o => o.name === 'reason');
+    const targetUser = options.find(o => o.name === 'user').value;
+    const reasonOpt = options.find(o => o.name === 'reason');
     const reason = reasonOpt ? reasonOpt.value : 'Access revoked by the Administrator.';
     
     delete store.access[targetUser];
@@ -325,8 +359,8 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     }
     saveStore(store);
 
-    await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE');
-    await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT');
+    await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE').catch(() => {});
+    await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT').catch(() => {});
 
     sendDM(targetUser, {
       embeds: [{
@@ -341,7 +375,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
 
   // --- STANDARD COMMANDS ---
   if (name === 'add-token') {
-    const actionOption = data.options?.find((o) => o.name === 'action')?.value;
+    const actionOption = options.find((o) => o.name === 'action')?.value;
 
     if (actionOption === 'register') {
       const existingTokens = Object.keys(store.credentials[user.id] || {});
@@ -420,7 +454,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       return notice(res, COLOR.amber, '📭 Zero Pipelines Found', 'You do not have any active or saved configurations to delete.');
     }
 
-    // Respond immediately using standard source message response to prevent timeouts
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
@@ -470,7 +503,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       return notice(res, COLOR.red, '🚫 Authorization Blocked', 'Security policy requires a registered user credential before provisioning pipelines.\n\n👉 Run `/add-token register` first.');
     }
 
-    const cfgName = data.options?.[0]?.value?.trim()?.slice(0, 50);
+    const cfgName = options?.[0]?.value?.trim()?.slice(0, 50);
     if (!cfgName) return ephemeral(res, '⚠️ Configuration name cannot be empty.');
 
     const maxConfigs = getMaxConfigs(user.id, store);
@@ -501,7 +534,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       const randSuffix = Math.random().toString(36).substring(2, 6);
       const setupChannelName = `setup-${slug(cfgName)}-${randSuffix}`;
 
-      // Provision setup workspace channel inside USER_SETUP_ID category
       const setup = await DiscordRequest(`guilds/${guildId}/channels`, {
         method: 'POST',
         body: {
@@ -517,7 +549,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       store.drafts[setup.id] = draft;
       saveStore(store);
 
-      // --- 10-MINUTE AUTOMATIC EXPIRATION TIMER ---
       const EXPIRATION_MS = 10 * 60 * 1000;
       setTimeout(async () => {
         if (store.drafts[setup.id]) {
