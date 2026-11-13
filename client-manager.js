@@ -3,7 +3,7 @@ import { Client } from 'discord.js-selfbot-v13';
 import { ProxyAgent } from 'undici';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
-const activeClients = new Map();
+const activeClients = new Map(); // Stores { client, token } per user
 const BASE_PROXY_URL = process.env.RESIDENTIAL_PROXY_URL;
 
 // Dynamically generate a sticky session proxy URL per user
@@ -11,7 +11,6 @@ function getUserProxy(userId) {
   if (!BASE_PROXY_URL) return undefined;
   try {
     const url = new URL(BASE_PROXY_URL);
-    // proxy.market and similar providers use "-session-[string]" attached to the username
     if (url.username && !url.username.includes('-session-')) {
       url.username = `${url.username}-session-${userId}`;
     }
@@ -23,10 +22,22 @@ function getUserProxy(userId) {
 }
 
 export async function getUserClient(userId, token) {
-  // Return existing active client if it exists to prevent duplicate connections
+  // If an active client exists, check if the token changed
   if (activeClients.has(userId)) {
-    const existingClient = activeClients.get(userId);
-    if (existingClient.isReady()) return existingClient;
+    const session = activeClients.get(userId);
+    
+    // If the token matches and the client is ready, reuse it
+    if (session.token === token && session.client.isReady()) {
+      return session.client;
+    }
+    
+    // Otherwise, destroy the old client because the token was updated or session dropped
+    try {
+      await session.client.destroy();
+    } catch (e) {
+      // Ignore destruction errors
+    }
+    activeClients.delete(userId);
   }
 
   const userProxy = getUserProxy(userId);
@@ -45,14 +56,18 @@ export async function getUserClient(userId, token) {
   client.on('error', (err) => console.error(`[User ${userId}] WebSocket Error:`, err.message));
 
   await client.login(token);
-  activeClients.set(userId, client);
+  
+  // Store both the client instance and its associated token
+  activeClients.set(userId, { client, token });
   return client;
 }
 
 export function stopUserClient(userId) {
-  const client = activeClients.get(userId);
-  if (client) {
-    client.destroy();
+  const session = activeClients.get(userId);
+  if (session) {
+    try {
+      session.client.destroy();
+    } catch (e) {}
     activeClients.delete(userId);
   }
 }
