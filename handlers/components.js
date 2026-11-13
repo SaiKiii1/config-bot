@@ -77,11 +77,16 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
   const user = req.body.member?.user ?? req.body.user;
   const guildId = req.body.guild_id;
 
+  // Ensure settings & defaults exist
+  store.settings ??= {};
+  store.settings.trialDurationDays ??= 7;
+  const trialDays = store.settings.trialDurationDays;
+
   if (data.custom_id === 'store_free_trial') {
     store.trials ??= {};
 
     if (store.trials[user.id]) {
-      return reply(res, { content: '⚠️ **Free Trial Already Claimed**: You have already claimed your one-time 24-hour free trial for this account.\n\nIf you would like to continue using the AutomateX auto-post service, please purchase access by opening a ticket in the support channel!' });
+      return reply(res, { content: `⚠️ **Free Trial Already Claimed**: You have already claimed your one-time free trial pass for this account.\n\nIf you would like to continue using the AutomateX auto-post service, please purchase access by opening a ticket in the support channel!` });
     }
 
     if (store.access[user.id]) {
@@ -89,11 +94,11 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     }
 
     const now = Date.now();
-    const DAY = 24 * 60 * 60 * 1000;
-    const expiresAt = now + DAY;
+    const durationMs = trialDays * 24 * 60 * 60 * 1000;
+    const expiresAt = now + durationMs;
 
     store.trials[user.id] = { claimedAt: now };
-    store.access[user.id] = { grantedAt: now, expiresAt, durationLabel: '24 Hours (Free Trial)' };
+    store.access[user.id] = { grantedAt: now, expiresAt, durationLabel: `${trialDays} Days (Free Trial)` };
     saveStore(store);
 
     if (guildId) {
@@ -104,13 +109,13 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     return reply(res, {
       embeds: [{
         color: COLOR.green,
-        title: '🎉 24-HOUR FREE TRIAL ACTIVATED!',
-        description: `Congratulations <@${user.id}>! Your one-time 24-hour free trial has been successfully claimed.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        title: `🎉 ${trialDays}-DAY FREE TRIAL ACTIVATED!`,
+        description: `Congratulations <@${user.id}>! Your one-time ${trialDays}-day free trial has been successfully claimed.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
         fields: [
           { name: '⏰ Access Expiration', value: `<t:${Math.floor(expiresAt / 1000)}:F> (<t:${Math.floor(expiresAt / 1000)}:R>)`, inline: false },
           { name: '🚀 NEXT STEPS & SETUP GUIDE', value: '1️⃣ **Register Credential:** Run `/add-token register` to securely vault your account session token.\n2️⃣ **Provision Pipeline:** Run `/add-config name:MyFirstPost` to open your private setup workspace.\n3️⃣ **Command Center:** Control dispatches and view live metrics in your private controller channel.\n\n📌 *Need assistance? Visit <#1567854828670025748> for rules & policies or open a ticket to contact staff.*', inline: false }
         ],
-        footer: { text: 'AutomateX • 1-Time Free Trial System' },
+        footer: { text: `AutomateX • 1-Time ${trialDays}-Day Free Trial System` },
         timestamp: new Date().toISOString()
       }]
     });
@@ -197,7 +202,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           embeds: [{
             color: COLOR.green,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: '🇵🇭 **GCash QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Scan the QR code below** using your GCash app to complete payment.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
+            description: '🇵🇭 **GCash QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Scan the QR code below** using your GCash app to complete payment.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
             image: { url: 'https://i.imgur.com/JHVxpgp.png' },
             footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
           }]
@@ -212,7 +217,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           embeds: [{
             color: COLOR.green,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: '🅿️ **PayPal International QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Scan the QR code below** using your PayPal app to complete payment.\n• **Transfer Mode:** Friends & Family (F&F)\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
+            description: '🅿️ **PayPal International QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Scan the QR code below** using your PayPal app to complete payment.\n• **Transfer Mode:** Friends & Family (F&F)\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
             image: { url: 'https://i.imgur.com/XjZL7id.png' },
             footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
           }]
@@ -227,7 +232,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           embeds: [{
             color: COLOR.blurple,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: '💸 **Wise International Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Please wait for assistance from our admins.**\n• An administrator will respond in this ticket shortly to provide Wise payment details and assist you with your transfer.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Thank you for your patience!*',
+            description: '💸 **Wise International Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Please wait for assistance from our admins.**\nAn administrator will respond in this ticket shortly to provide Wise payment details and assist you with your transfer.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Thank you for your patience!*',
             footer: { text: 'AutomateX Checkout • Admin Assistance Required' }
           }]
         }
@@ -241,7 +246,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           embeds: [{
             color: COLOR.blurple,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: '💎 **Growtopia Diamond Locks (DLs) Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• **Please wait for assistance from our admins.**\n• An administrator will join this ticket shortly to provide the World Name, trade details, or meet you in-game.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Thank you for your patience!*',
+            description: '💎 **Growtopia Diamond Locks (DLs) Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Please wait for assistance from our admins.**\nAn administrator will join this ticket shortly to provide the World Name, trade details, or meet you in-game.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Thank you for your patience!*',
             footer: { text: 'AutomateX Checkout • Admin Assistance Required' }
           }]
         }
