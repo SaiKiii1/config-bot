@@ -34,7 +34,7 @@ export function cardPanel(id, c) {
   const color = hasError ? COLOR.red : isRunning ? COLOR.green : COLOR.grey;
 
   const lineCount = c.text ? c.text.split('\n').length : 0;
-  const lastRunText = c.lastSentAt ? `<t:${unix(c.lastSentAt)}:R>` : '2 hours ago';
+  const lastRunText = c.lastSentAt ? `<t:${unix(c.lastSentAt)}:R>` : 'Never';
   const nextRunText = isRunning ? 'Scheduled' : 'Not scheduled';
 
   return {
