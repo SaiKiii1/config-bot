@@ -328,13 +328,13 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'PUT').catch(() => {});
     await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'DELETE').catch(() => {});
 
-    sendDM(targetUser, {
+    await sendDM(targetUser, {
       embeds: [{
         color: COLOR.green,
         title: '🟢 SUBSCRIPTION ACCESS GRANTED',
         description: `Hello <@${targetUser}>! Your AutomateX subscription access has been activated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Duration:** ${label}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Admin Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
       }]
-    });
+    }).catch(() => {});
 
     return notice(res, COLOR.green, '✅ Clearance Granted', `Operator <@${targetUser}> has been authorized.\n**Duration:** ${label}`);
   }
@@ -362,13 +362,13 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE').catch(() => {});
     await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT').catch(() => {});
 
-    sendDM(targetUser, {
+    await sendDM(targetUser, {
       embeds: [{
         color: COLOR.red,
         title: '🔴 SUBSCRIPTION ACCESS REVOKED',
         description: `Hello <@${targetUser}>! Your AutomateX subscription access has been deactivated.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Reason:** ${reason}\n**Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Admin Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
       }]
-    });
+    }).catch(() => {});
 
     return notice(res, COLOR.green, '🗑️ Operator Purged', `Operator <@${targetUser}> authorization terminated.\n🛑 **${terminated} pipeline(s) destroyed and credential vault wiped.**`);
   }
@@ -528,8 +528,12 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     try {
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
 
-      const controllerId = await ensureController(guildId, user, store, saveStore);
-      await repostCards(guildId, user.id, controllerId);
+      // Check cache to avoid redundant REST calls for controller channel initialization
+      let controllerId = store.users[`${guildId}:${user.id}`]?.controllerChannelId;
+      if (!controllerId) {
+        controllerId = await ensureController(guildId, user, store, saveStore);
+        await repostCards(guildId, user.id, controllerId);
+      }
       
       const randSuffix = Math.random().toString(36).substring(2, 6);
       const setupChannelName = `setup-${slug(cfgName)}-${randSuffix}`;
