@@ -528,7 +528,8 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     try {
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
 
-      // Check cache to avoid redundant REST calls for controller channel initialization
+      // Initialize store.users safely and check cache to avoid redundant REST calls for existing controllers
+      store.users ??= {};
       let controllerId = store.users[`${guildId}:${user.id}`]?.controllerChannelId;
       if (!controllerId) {
         controllerId = await ensureController(guildId, user, store, saveStore);
