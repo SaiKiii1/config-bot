@@ -55,7 +55,7 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
         await manageRole(currentConfig.guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE').catch(() => {});
         await manageRole(currentConfig.guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT').catch(() => {});
 
-        sendDM(targetUser, {
+        await sendDM(targetUser, {
           embeds: [{
             color: 0xed4245,
             title: '⌛ SUBSCRIPTION ACCESS EXPIRED',
@@ -122,13 +122,27 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
         return;
       }
       
-      console.error(`Pipeline ${id} halted:`, err.message);
-      stopRunner(id, store);
-      currentConfig.running = false;
-      currentConfig.startedAt = null;
-      currentConfig.lastError = `Execution Terminated: API endpoint rejected payload dispatch (${err.message}).`;
+      console.error(`Pipeline ${id} dispatch error:`, err.message);
+      
+      // Update statistics and store error info without stopping/pausing the runner
+      currentConfig.failed = (currentConfig.failed ?? 0) + 1;
+      currentConfig.lastError = `Dispatch Failed: ${err.message}`;
       saveStore(store);
+      
       if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
+
+      // --- SEND HEADS-UP DM NOTIFICATION TO USER (PIPELINE KEEPS RUNNING) ---
+      await sendDM(currentConfig.userId, {
+        embeds: [{
+          color: 0xed4245,
+          title: '⚠️ AUTOMATEX DISPATCH NOTIFICATION',
+          description: `Your pipeline **\`${currentConfig.name}\`** encountered an issue and skipped a message dispatch to <#${currentConfig.channelId}>.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Reason:** \`${err.message}\`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Note:* Your pipeline is **still running** and will automatically attempt to send again on the next scheduled cycle.`,
+          timestamp: new Date().toISOString()
+        }]
+      }).catch(() => {});
+
+      // Continue the schedule normally for the next cycle
+      scheduleNext(currentConfig.delay);
     }
   };
 
@@ -177,7 +191,7 @@ export async function cleanupExpiredAccess(store, saveStore) {
         await manageRole(primaryGuildId, userId, process.env.MEMBER_ROLE_ID, 'PUT').catch(() => {});
       }
 
-      sendDM(userId, {
+      await sendDM(userId, {
         embeds: [{
           color: 0xed4245,
           title: '⌛ SUBSCRIPTION ACCESS EXPIRED',
