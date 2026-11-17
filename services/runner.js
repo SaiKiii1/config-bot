@@ -128,24 +128,33 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       
       console.error(`Pipeline ${id} dispatch error:`, err.message);
       
-      // Update statistics and store error info without stopping/pausing the runner
+      // Detect if the failure was caused by an active channel slowmode or cooldown
+      const isCooldownOrSlowmode = 
+        errStatus === 429 || 
+        err.message?.toLowerCase().includes('slowmode') || 
+        err.message?.toLowerCase().includes('cooldown') ||
+        err.message?.toLowerCase().includes('wait');
+
+      const reasonTitle = isCooldownOrSlowmode 
+        ? '⏳ Channel Cooldown / Slowmode Active' 
+        : `Dispatch Failed: ${err.message}`;
+
       currentConfig.failed = (currentConfig.failed ?? 0) + 1;
-      currentConfig.lastError = `Dispatch Failed: ${err.message}`;
+      currentConfig.lastError = reasonTitle;
       saveStore(store);
       
       if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
 
-      // --- SEND HEADS-UP DM NOTIFICATION TO USER (PIPELINE KEEPS RUNNING) ---
+      // --- SEND HEADS-UP DM NOTIFICATION WITH COOLDOWN FLAG ---
       await sendDM(currentConfig.userId, {
         embeds: [{
           color: 0xed4245,
-          title: '⚠️ AUTOMATEX DISPATCH NOTIFICATION',
-          description: `Your pipeline **\`${currentConfig.name}\`** encountered an issue and skipped a message dispatch to <#${currentConfig.channelId}>.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Reason:** \`${err.message}\`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Note:* Your pipeline is **still running** and will automatically attempt to send again on the next scheduled cycle.`,
+          title: isCooldownOrSlowmode ? '⚠️ COOLDOWN DISPATCH WARNING' : '⚠️ AUTOMATEX DISPATCH NOTIFICATION',
+          description: `Your pipeline **\`${currentConfig.name}\`** attempted to send a message to <#${currentConfig.channelId}> before the channel cooldown duration reset.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Reason:** \`${err.message}\`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Note:* Your pipeline is **still running** and will retry automatically once the cooldown clears.`,
           timestamp: new Date().toISOString()
         }]
       }).catch(() => {});
 
-      // Continue the schedule normally for the next cycle
       scheduleNext(currentConfig.delay);
     }
   };
