@@ -82,6 +82,27 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
   store.settings.trialDurationDays ??= 7;
   const trialDays = store.settings.trialDurationDays;
 
+  // --- HANDLE SHARING TOGGLE BUTTON ---
+  if (data.custom_id === 'share:disable') {
+    store.users ??= {};
+    store.users[`${guildId}:${user.id}`] ??= {};
+    store.users[`${guildId}:${user.id}`].shareable = false;
+    saveStore(store);
+
+    return res.send({
+      type: InteractionResponseType.UPDATE_MESSAGE,
+      data: {
+        embeds: [{
+          color: 0xed4245,
+          title: '🔴 TEMPLATE SHARING DISABLED',
+          description: 'Template sharing has been successfully **revoked**. Other operators can no longer mirror your controller pipelines.',
+          timestamp: new Date().toISOString()
+        }],
+        components: []
+      }
+    });
+  }
+
   if (data.custom_id === 'store_free_trial') {
     store.trials ??= {};
 
@@ -106,7 +127,6 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
       await manageRole(guildId, user.id, process.env.MEMBER_ROLE_ID, 'DELETE').catch(() => {});
     }
 
-    // Send direct message confirmation to user inbox
     await sendDM(user.id, {
       embeds: [{
         color: COLOR.green,
@@ -168,7 +188,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
             fields: [
               { name: '📦 Selected Package', value: `\`${pkg.name}\``, inline: true },
               { name: '⚙️ Pipeline Capacity', value: `\`${pkg.configs}\``, inline: true },
-              { name: '💰 Price Options', value: `• **Local Currency:** ${pkg.pricePHP}\n• **USD International:** ${pkg.priceUSD}\n• **Growtopia:** ${pkg.priceDLs}`, inline: false },
+              { name: '💰 Price Options', value: `• **Local Currency:** ${pkg.pricePHP}\n**USD International:** ${pkg.priceUSD}\n**Growtopia:** ${pkg.priceDLs}`, inline: false },
               { name: '📜 IMPORTANT NOTICE', value: 'Before you continue purchasing, please make sure you have thoroughly read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>).', inline: false },
               { name: '💳 SELECT PAYMENT METHOD BELOW', value: 'Click a button below to view specific payment account details & instructions!', inline: false }
             ],
@@ -222,7 +242,7 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
           embeds: [{
             color: COLOR.green,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: '🅿️ **PayPal International QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Scan the QR code below** using your PayPal app to complete payment.\n• **Transfer Mode:** Friends & Family (F&F)\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
+            description: '🅿️ **PayPal International QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Scan the QR code below** using your PayPal app to complete payment.\n**Transfer Mode:** Friends & Family (F&F)\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
             image: { url: 'https://i.imgur.com/XjZL7id.png' },
             footer: { text: 'AutomateX Checkout • Instant Staff Verification' }
           }]
