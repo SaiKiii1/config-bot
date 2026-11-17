@@ -111,12 +111,16 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       scheduleNext(currentConfig.delay);
 
     } catch (err) {
-      if (err.status === 429) {
+      const errStatus = err.status || err.httpStatus || err.response?.status;
+
+      if (errStatus === 429) {
         console.warn(`Pipeline ${id}: Rate limited (429). Applying backoff penalty...`);
         scheduleNext(currentConfig.delay * 2);
         return;
       }
-      if (!err.status || err.status >= 500) {
+
+      const isNetworkTimeout = !errStatus && (err.code === 'ETIMEDOUT' || err.code === 'ENOTFOUND' || err.code === 'ECONNRESET' || err.message?.includes('fetch failed'));
+      if (isNetworkTimeout) {
         console.warn(`Pipeline ${id}: Transient network delay skipped dispatch (${err.message})`);
         scheduleNext(currentConfig.delay);
         return;
