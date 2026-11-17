@@ -29,6 +29,28 @@ const commands = [
     options: [{ type: 3, name: 'name', description: 'Pipeline reference name', required: true }]
   },
   {
+    name: 'allow-copy-config',
+    description: '🔓 Toggle your controller template sharing status on or off for other operators.'
+  },
+  {
+    name: 'copy-controller',
+    description: '📋 Mirror another operator\'s shared controller and configuration pipelines.',
+    options: [
+      {
+        name: 'source',
+        description: 'The operator whose controller/configs you want to copy',
+        type: 6, // USER type
+        required: true,
+      },
+      {
+        name: 'target',
+        description: 'The operator who will receive the mirrored configuration pipelines (Optional: defaults to you)',
+        type: 6, // USER type
+        required: false,
+      }
+    ]
+  },
+  {
     name: 'set-trial-duration',
     description: '🛠️ (Admin) Set the duration of the free trial in days.',
     options: [
