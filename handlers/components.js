@@ -90,15 +90,15 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
     saveStore(store);
 
     return res.send({
-      type: InteractionResponseType.UPDATE_MESSAGE,
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
       data: {
+        flags: InteractionResponseFlags.EPHEMERAL, // Makes it visible ONLY to the user, with a built-in "Dismiss message" button
         embeds: [{
           color: 0xed4245,
           title: '🔴 TEMPLATE SHARING DISABLED',
           description: 'Template sharing has been successfully **revoked**. Other operators can no longer mirror your controller pipelines.',
           timestamp: new Date().toISOString()
-        }],
-        components: []
+        }]
       }
     });
   }
