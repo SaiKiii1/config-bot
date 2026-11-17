@@ -14,7 +14,6 @@ const reply = (res, data) =>
 const ephemeral = (res, content) => reply(res, { content });
 const notice = (res, color, title, description) => reply(res, { embeds: [{ color, title, description }] });
 
-// Helper to resolve dynamic quota limits based on clearance tier
 function getMaxConfigs(userId, store) {
   const ADMIN_ID = process.env.ADMIN_ID;
   if (userId === ADMIN_ID) return Infinity;
@@ -56,7 +55,9 @@ const helpEmbed = (trialDays = 7) => ({
         '• **`/controller`** — Open or restore your private secured Command Center channel.\n' +
         '• **`/stop-all`** — Emergency halt all of your running configuration pipelines at once.\n' +
         '• **`/add-token`** — Register, list, or purge your account session credentials.\n' +
-        '• **`/add-config`** — Create a new automated posting configuration.',
+        '• **`/add-config`** — Create a new automated posting configuration.\n' +
+        '• **`/allow-copy-config`** — Toggle your controller template sharing status on/off.\n' +
+        '• **`/copy-controller`** — Mirror another operator\'s shared controller pipelines.',
     },
     {
       name: '🔑 Administration & Management Tools',
@@ -106,7 +107,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   
   const ADMIN_ID = process.env.ADMIN_ID;
 
-  // Ensure settings & defaults exist
   store.settings ??= {};
   store.settings.trialDurationDays ??= 7;
   const trialDays = store.settings.trialDurationDays;
@@ -114,8 +114,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (name === 'help') return reply(res, { embeds: [helpEmbed(trialDays)] });
   if (!guildId) return ephemeral(res, '⚠️ **Context Error**: Command execution restricted to guild servers.');
 
-  // --- AUTHORIZATION GATE ---
-  if (name !== 'grant-access' && name !== 'revoke-access' && name !== 'promotion' && name !== 'store' && name !== 'set-trial-duration') {
+  if (name !== 'grant-access' && name !== 'revoke-access' && name !== 'promotion' && name !== 'store' && name !== 'set-trial-duration' && name !== 'copy-controller' && name !== 'allow-copy-config') {
     const access = store.access[user.id];
     const now = Date.now();
     
@@ -128,6 +127,152 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         return notice(res, COLOR.red, '🚫 Clearance Required', 'You do not have active security clearance to operate this framework. Please contact the administrator.');
       }
     }
+  }
+
+  // --- ALLOW CONFIG COPY COMMAND (USER OPT-IN) ---
+  if (name === 'allow-copy-config') {
+    store.users ??= {};
+    store.users[`${guildId}:${user.id}`] ??= {};
+    
+    // Toggle or enable sharing
+    const currentState = store.users[`${guildId}:${user.id}`].shareable ?? false;
+    const newState = !currentState;
+    store.users[`${guildId}:${user.id}`].shareable = newState;
+    saveStore(store);
+
+    const controllerId = store.users[`${guildId}:${user.id}`].controllerChannelId;
+
+    if (newState && controllerId) {
+      // Send interactive sharing control card into their private controller channel
+      await DiscordRequest(`channels/${controllerId}/messages`, {
+        method: 'POST',
+        body: {
+          embeds: [{
+            color: COLOR.green,
+            title: '🟢 TEMPLATE SHARING ACTIVE',
+            description: 'Your controller templates are now **shareable**. Other operators can mirror your configuration pipelines using `/copy-controller`.\n\nClick the button below instantly to revoke sharing access at any time.',
+            timestamp: new Date().toISOString()
+          }],
+          components: [
+            row(btn('share:disable', '🛑 Stop Sharing Templates', 4))
+          ]
+        }
+      }).catch(() => {});
+    }
+
+    return notice(
+      res,
+      newState ? COLOR.green : COLOR.amber,
+      newState ? '🟢 Template Sharing Enabled' : '🔴 Template Sharing Disabled',
+      newState 
+        ? 'Your configurations are now open for copying. An interactive control prompt has been sent to your Command Center channel.'
+        : 'Your template sharing has been deactivated. Other operators can no longer mirror your setup.'
+    );
+  }
+
+  // --- COPY CONTROLLER COMMAND (OPEN TO USERS WITH CONSENT CHECK) ---
+  if (name === 'copy-controller') {
+    const sourceUser = options.find((o) => o.name === 'source')?.value;
+    const targetUser = options.find((o) => o.name === 'target')?.value || user.id; // Defaults to self if target omitted
+
+    if (!sourceUser) {
+      return ephemeral(res, '⚠️ Please provide the `source` operator whose controller you want to copy.');
+    }
+
+    if (sourceUser === targetUser) {
+      return ephemeral(res, '⚠️ Source and target operator cannot be the same.');
+    }
+
+    // Check if the source user explicitly enabled sharing (unless copier is admin)
+    store.users ??= {};
+    const sourceUserData = store.users[`${guildId}:${sourceUser}`];
+    const isSourceShareable = sourceUserData?.shareable ?? false;
+
+    if (user.id !== ADMIN_ID && !isSourceShareable) {
+      return notice(
+        res,
+        COLOR.red,
+        '🚫 Sharing Restricted',
+        `Operator <@${sourceUser}> has not made their controller templates shareable. They must run \`/allow-copy-config\` first to permit mirroring.`
+      );
+    }
+
+    const sourceConfigs = Object.entries(store.configs || {}).filter(
+      ([, c]) => c.userId === sourceUser && c.guildId === guildId
+    );
+
+    if (!sourceConfigs.length) {
+      return notice(res, COLOR.amber, '📭 Zero Source Pipelines', `Operator <@${sourceUser}> has no active configuration pipelines to copy.`);
+    }
+
+    const targetMaxConfigs = getMaxConfigs(targetUser, store);
+    const targetExistingCount = mineOf(guildId, targetUser).length;
+
+    if (targetExistingCount + sourceConfigs.length > targetMaxConfigs) {
+      const limitStr = targetMaxConfigs === Infinity ? 'Unlimited' : targetMaxConfigs;
+      return notice(
+        res,
+        COLOR.red,
+        '⚠️ Quota Exceeded for Target',
+        `Cannot copy controller. Target operator <@${targetUser}> has **${targetExistingCount}** existing config(s) and requires **${sourceConfigs.length}** slot(s), exceeding their tier maximum limit of **${limitStr}**.`
+      );
+    }
+
+    try {
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
+
+      let targetControllerId = store.users[`${guildId}:${targetUser}`]?.controllerChannelId;
+      
+      if (!targetControllerId) {
+        const targetUserObj = { id: targetUser, username: 'TargetOperator' };
+        targetControllerId = await ensureController(guildId, targetUserObj, store, saveStore);
+      }
+
+      let clonedCount = 0;
+      for (const [, cfg] of sourceConfigs) {
+        const newCfgId = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+        
+        store.configs[newCfgId] = {
+          userId: targetUser,
+          username: 'TargetOperator',
+          guildId: guildId,
+          controllerChannelId: targetControllerId,
+          cardMessageId: null,
+          name: cfg.name,
+          channelId: cfg.channelId,
+          text: cfg.text,
+          delay: cfg.delay,
+          running: false, // SAFETY DEFAULT
+          startedAt: null,
+          sent: 0,
+          failed: 0,
+          lastSentAt: null,
+          lastError: null,
+          createdAt: Date.now()
+        };
+        clonedCount++;
+      }
+
+      await repostCards(guildId, targetUser, targetControllerId);
+      saveStore(store);
+
+      await editOriginal(token, {
+        content: '',
+        embeds: [{
+          color: COLOR.green,
+          title: '✅ Controller Cloned Successfully',
+          description: `Successfully mirrored **${clonedCount}** configuration pipeline(s) from <@${sourceUser}> to <@${targetUser}>.\n\n📂 **Target Command Center:** <#${targetControllerId}>\n🔒 *Note: All cloned pipelines default to a paused state for safety.*`,
+          timestamp: new Date().toISOString()
+        }]
+      });
+    } catch (err) {
+      console.error('[ERROR] Failed to execute /copy-controller:', err?.message || err);
+      await editOriginal(token, {
+        content: '',
+        embeds: [{ color: COLOR.red, title: '⚠️ Controller Copy Failed', description: `Details: \`${err?.message || 'Unknown error'}\`.` }]
+      }).catch(() => {});
+    }
+    return;
   }
 
   // --- SET TRIAL DURATION COMMAND (ADMIN ONLY) ---
@@ -528,7 +673,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     try {
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
 
-      // Initialize store.users safely and check cache to avoid redundant REST calls for existing controllers
       store.users ??= {};
       let controllerId = store.users[`${guildId}:${user.id}`]?.controllerChannelId;
       if (!controllerId) {
