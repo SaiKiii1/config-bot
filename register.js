@@ -58,6 +58,22 @@ const commands = [
     ]
   },
   {
+    name: 'set-price',
+    description: '💎 (Admin) Set the Diamond Lock (DL) price for a specific package tier.',
+    options: [
+      {
+        type: 3, name: 'package', description: 'The package tier to update', required: true,
+        choices: [
+          { name: '3 Days Pass', value: '3d' },
+          { name: '7 Days Pass', value: '7d' },
+          { name: '1 Month Pass', value: '1m' },
+          { name: 'Lifetime Pass', value: 'lifetime' }
+        ]
+      },
+      { type: 4, name: 'dl_amount', description: 'The new price in Diamond Locks (DLs)', required: true }
+    ]
+  },
+  {
     name: 'check-access',
     description: '🔍 (Admin) Check subscription clearance, duration, and expiration status of a user.',
     options: [
