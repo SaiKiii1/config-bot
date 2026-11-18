@@ -64,7 +64,7 @@ const helpEmbed = (trialDays = 7) => ({
       value:
         '• **`/store`** — Publish the official AutomateX license pricing and store showcase embed *(Admin)*.\n' +
         '• **`/set-trial-duration`** — Configure the active free trial duration in days *(Admin)*.\n' +
-        '• **`/set-price`** — Configure the Diamond Lock price for package tiers *(Admin)*.\n' +
+        '• **`/set-price`** — Configure the base Lifetime Diamond Lock price *(Admin)*.\n' +
         '• **`/check-access`** — Verify subscription clearance and expiration status of a user *(Admin)*.\n' +
         '• **`/grant-access`** — Authorize a user with a specific subscription duration tier *(Admin)*.\n' +
         '• **`/revoke-access`** — Terminate clearance, purge credentials, and wipe user pipelines *(Admin)*.\n' +
@@ -110,9 +110,15 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
 
   store.settings ??= {};
   store.settings.trialDurationDays ??= 7;
-  store.settings.prices ??= { '3d': 10, '7d': 20, '1m': 50, 'lifetime': 100 };
+  store.settings.lifetimePrice ??= 100; // Default lifetime price in DLs
   const trialDays = store.settings.trialDurationDays;
-  const prices = store.settings.prices;
+  const lifetimePrice = store.settings.lifetimePrice;
+
+  // Automatically derive proportional tier prices from Lifetime price
+  const dLife = lifetimePrice;
+  const d1m = Math.max(1, Math.round(lifetimePrice * 0.5));   // 50% of Lifetime
+  const d7 = Math.max(1, Math.round(lifetimePrice * 0.2));    // 20% of Lifetime
+  const d3 = Math.max(1, Math.round(lifetimePrice * 0.1));    // 10% of Lifetime
 
   if (name === 'help') return reply(res, { embeds: [helpEmbed(trialDays)] });
   if (!guildId) return ephemeral(res, '⚠️ **Context Error**: Command execution restricted to guild servers.');
@@ -295,35 +301,29 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (name === 'set-price') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
 
-    const pkgOpt = options.find((o) => o.name === 'package')?.value;
-    const dlOpt = options.find((o) => o.name === 'dl_amount')?.value;
-
-    if (!pkgOpt || dlOpt === undefined || dlOpt < 0) {
-      return ephemeral(res, '⚠️ Please provide a valid package tier and Diamond Lock (DL) amount.');
+    const lifetimeOpt = options.find((o) => o.name === 'lifetime_dl')?.value;
+    if (lifetimeOpt === undefined || lifetimeOpt < 0) {
+      return ephemeral(res, '⚠️ Please provide a valid Diamond Lock (DL) amount for Lifetime access.');
     }
 
-    store.settings.prices ??= { '3d': 10, '7d': 20, '1m': 50, 'lifetime': 100 };
-    store.settings.prices[pkgOpt] = dlOpt;
+    store.settings.lifetimePrice = lifetimeOpt;
     saveStore(store);
 
-    const packageLabels = { '3d': '3 Days Pass', '7d': '7 Days Pass', '1m': '1 Month Pass', 'lifetime': 'Lifetime Pass' };
+    const auto3d = Math.max(1, Math.round(lifetimeOpt * 0.1));
+    const auto7d = Math.max(1, Math.round(lifetimeOpt * 0.2));
+    const auto1m = Math.max(1, Math.round(lifetimeOpt * 0.5));
 
     return notice(
       res,
       COLOR.green,
-      '✅ Price Updated Successfully',
-      `The Diamond Lock price for **${packageLabels[pkgOpt] || pkgOpt}** has been successfully updated to **${dlOpt} DLs**.`
+      '💎 Base Price Updated & Proportions Scaled',
+      `Lifetime price successfully set to **${lifetimeOpt} DLs**.\n\nShorter tiers have automatically scaled:\n• **3 Days:** ${auto3d} DLs\n• **7 Days:** ${auto7d} DLs\n• **1 Month:** ${auto1m} DLs\n• **Lifetime:** ${lifetimeOpt} DLs`
     );
   }
 
   // --- STORE DISPLAY COMMAND (ADMIN ONLY) ---
   if (name === 'store') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
-
-    const d3 = prices['3d'] ?? 10;
-    const d7 = prices['7d'] ?? 20;
-    const d1m = prices['1m'] ?? 50;
-    const dLife = prices['lifetime'] ?? 100;
 
     return res.send({
       type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
