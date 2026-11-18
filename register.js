@@ -59,18 +59,9 @@ const commands = [
   },
   {
     name: 'set-price',
-    description: '💎 (Admin) Set the Diamond Lock (DL) price for a specific package tier.',
+    description: '💎 (Admin) Set the base Lifetime Diamond Lock price (shorter tiers auto-scale proportionally).',
     options: [
-      {
-        type: 3, name: 'package', description: 'The package tier to update', required: true,
-        choices: [
-          { name: '3 Days Pass', value: '3d' },
-          { name: '7 Days Pass', value: '7d' },
-          { name: '1 Month Pass', value: '1m' },
-          { name: 'Lifetime Pass', value: 'lifetime' }
-        ]
-      },
-      { type: 4, name: 'dl_amount', description: 'The new price in Diamond Locks (DLs)', required: true }
+      { type: 4, name: 'lifetime_dl', description: 'The new price in Diamond Locks (DLs) for Lifetime access', required: true }
     ]
   },
   {
