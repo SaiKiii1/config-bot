@@ -64,7 +64,7 @@ export function cardPanel(id, c) {
         btn(`delete:${id}`, 'Delete', 4)
       ),
       row(
-        btn(`set:cfg:${id}:text`, 'Edit Message', 1),
+        btn(`edit:${id}`, 'Edit Message', 1),
         btn(`set:cfg:${id}:channelId`, 'Edit Channel', 2),
         btn(`set:cfg:${id}:delay`, 'Edit Interval', 2)
       )
@@ -441,6 +441,24 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
         await editOriginal(token, { ...setupPanel(id, d), content: '⚠️ Initialization fault encountered.' }).catch(() => {});
       }
       return;
+    }
+
+    if (action === 'edit') {
+      const cfgId = p[0];
+      const cfg = store.configs[cfgId];
+      if (!cfg || cfg.userId !== user.id) return notYours(res);
+      
+      const panel = cardPanel(cfgId, cfg);
+      panel.components = [
+        row(
+          btn(`set:cfg:${cfgId}:name`, 'Rename', 2),
+          btn(`set:cfg:${cfgId}:channelId`, 'Target ID', 2),
+          btn(`set:cfg:${cfgId}:text`, 'Message Text', 2),
+          btn(`set:cfg:${cfgId}:delay`, 'Timer', 2),
+          btn(`refresh:${cfgId}`, '🔙 Cancel', 4)
+        )
+      ];
+      return res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: panel });
     }
 
     const cfgId = p[0];
