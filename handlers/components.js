@@ -82,25 +82,40 @@ export async function handleComponent(req, res, store, saveStore, lookup, modal,
   store.settings.trialDurationDays ??= 7;
   const trialDays = store.settings.trialDurationDays;
 
-  // --- HANDLE SHARING TOGGLE BUTTON ---
+  // --- HANDLE SHARING TOGGLE BUTTON WITH AUTO-CLEANUP & VALIDATION ---
   if (data.custom_id === 'share:disable') {
     store.users ??= {};
     store.users[`${guildId}:${user.id}`] ??= {};
+
+    if (!store.users[`${guildId}:${user.id}`].shareable) {
+      return ephemeral(res, '⚠️ You do not have an active sharing configuration or it is already disabled.');
+    }
+
     store.users[`${guildId}:${user.id}`].shareable = false;
     saveStore(store);
 
-    return res.send({
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    const channelId = req.body.channel_id;
+    const messageId = req.body.message?.id;
+
+    res.send({
+      type: InteractionResponseType.UPDATE_MESSAGE,
       data: {
-        flags: InteractionResponseFlags.EPHEMERAL, // Makes it visible ONLY to the user, with a built-in "Dismiss message" button
         embeds: [{
           color: 0xed4245,
           title: '🔴 TEMPLATE SHARING DISABLED',
-          description: 'Template sharing has been successfully **revoked**. Other operators can no longer mirror your controller pipelines.',
+          description: 'Template sharing has been successfully **revoked**. Other operators can no longer mirror your controller pipelines.\n\n🗑️ *This message will auto-delete in 5 seconds...*',
           timestamp: new Date().toISOString()
-        }]
+        }],
+        components: []
       }
     });
+
+    if (channelId && messageId) {
+      setTimeout(() => {
+        DiscordRequest(`channels/${channelId}/messages/${messageId}`, { method: 'DELETE' }).catch(() => {});
+      }, 5000);
+    }
+    return;
   }
 
   if (data.custom_id === 'store_free_trial') {
@@ -542,7 +557,7 @@ export async function handleModalSubmit(req, res, store, saveStore, lookup, vali
   const result = field === 'delay' ? parseDelay(values) : await validate(field, (values.value ?? '').trim(), target.guildId, user.id, store);
   if (result.error) return ephemeral(res, `⚠️ ${result.error}`);
 
-  target[field] = result.value;
+  Test = result.value;
   saveStore(store);
 
   if (mode === 'draft') {
