@@ -35,6 +35,7 @@ export async function getUserClient(userId, token) {
       } catch (e) {}
       activeClients.delete(userId);
     } else if (existingSession.client.isReady && existingSession.client.isReady()) {
+      existingSession.lastUsedAt = Date.now();
       return existingSession.client; // Reuse existing healthy client session!
     } else {
       // If client dropped connection, clean it up before re-logging in
@@ -63,7 +64,7 @@ export async function getUserClient(userId, token) {
     },
   };
 
-  // Prevent selfbot from caching messages/members/presences across all joined guilds
+  // Strip unused Discord caches across joined guilds to minimize per-user RAM footprint
   if (Options?.cacheWithLimits) {
     clientOptions.makeCache = Options.cacheWithLimits({
       ...Options.DefaultMakeCacheSettings,
@@ -73,6 +74,13 @@ export async function getUserClient(userId, token) {
       PresenceManager: 0,
       ReactionManager: 0,
       ThreadManager: 0,
+      GuildEmojiManager: 0,
+      GuildStickerManager: 0,
+      VoiceStateManager: 0,
+      StageInstanceManager: 0,
+      GuildBanManager: 0,
+      GuildInviteManager: 0,
+      GuildScheduledEventManager: 0,
     });
   }
 
@@ -99,7 +107,7 @@ export async function getUserClient(userId, token) {
         return activeClients.get(userId)?.client ?? client;
       }
 
-      activeClients.set(userId, { client, token });
+      activeClients.set(userId, { client, token, lastUsedAt: Date.now() });
       return client;
     } catch (err) {
       activeClients.delete(userId);
@@ -127,4 +135,25 @@ export function stopUserClient(userId) {
     } catch (e) {}
     activeClients.delete(userId);
   }
+}
+
+// Disconnect idle selfbot WebSockets when a user has 0 running pipelines for 3+ minutes
+export function startIdleClientSweeper(store, idleMs = 3 * 60 * 1000) {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [userId, session] of activeClients.entries()) {
+      const hasRunningConfig = Object.values(store.configs || {}).some(
+        (c) => c.userId === userId && c.running
+      );
+      const hasActiveRollout = Object.values(store.staggered || {}).some(
+        (s) => s?.userId === userId && s?.status === 'active'
+      );
+      const lastUsed = session.lastUsedAt || 0;
+
+      if (!hasRunningConfig && !hasActiveRollout && now - lastUsed > idleMs) {
+        console.log(`[RAM Sweeper] Disconnecting idle client for user ${userId}`);
+        stopUserClient(userId);
+      }
+    }
+  }, 60 * 1000);
 }
