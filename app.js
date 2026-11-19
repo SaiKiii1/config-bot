@@ -128,18 +128,80 @@ function setupPanel(id, d) {
   };
 }
 
+const controllerLocks = new Map();
+
 async function ensureController(guildId, user) {
   const key = `${guildId}:${user.id}`;
-  const existing = store.users[key]?.controllerChannelId;
-  if (existing) {
-    try { await DiscordRequest(`channels/${existing}`); return existing; } catch (e) { if (e.status !== 404) throw e; }
+
+  if (controllerLocks.has(key)) {
+    return controllerLocks.get(key);
   }
-  const ch = await DiscordRequest(`guilds/${guildId}/channels`, {
-    method: 'POST', body: { name: `controller-${slug(user.username)}`, type: 0, parent_id: process.env.CONTROLLER_CATEGORY_ID, topic: '🔒 Secured Command Center', permission_overwrites: privateOverwrites(guildId, user.id) },
-  });
-  store.users[key] = { ...(store.users[key] || {}), controllerChannelId: ch.id };
-  save();
-  return ch.id;
+
+  const task = (async () => {
+    const existing = store.users[key]?.controllerChannelId;
+    if (existing) {
+      try {
+        await DiscordRequest(`channels/${existing}`);
+        return existing;
+      } catch (e) {
+        if (e.status !== 404) throw e;
+      }
+    }
+
+    const configWithController = mineOf(guildId, user.id).find(([, c]) => c.controllerChannelId);
+    if (configWithController) {
+      const recoveredId = configWithController[1].controllerChannelId;
+      try {
+        await DiscordRequest(`channels/${recoveredId}`);
+        store.users[key] = { ...(store.users[key] || {}), controllerChannelId: recoveredId };
+        save();
+        return recoveredId;
+      } catch (e) {
+        if (e.status !== 404) throw e;
+      }
+    }
+
+    const expectedName = `controller-${slug(user.username)}`;
+    try {
+      const guildChannels = await DiscordRequest(`guilds/${guildId}/channels`);
+      const match = guildChannels.find(
+        (ch) =>
+          ch.type === 0 &&
+          ch.parent_id === process.env.CONTROLLER_CATEGORY_ID &&
+          ch.name === expectedName &&
+          Array.isArray(ch.permission_overwrites) &&
+          ch.permission_overwrites.some((ow) => ow.id === user.id)
+      );
+      if (match) {
+        store.users[key] = { ...(store.users[key] || {}), controllerChannelId: match.id };
+        save();
+        return match.id;
+      }
+    } catch (e) {
+      console.warn('Could not scan guild channels for existing controller:', e.message);
+    }
+
+    const ch = await DiscordRequest(`guilds/${guildId}/channels`, {
+      method: 'POST',
+      body: {
+        name: expectedName,
+        type: 0,
+        parent_id: process.env.CONTROLLER_CATEGORY_ID,
+        topic: '🔒 Secured Command Center',
+        permission_overwrites: privateOverwrites(guildId, user.id),
+      },
+    });
+    store.users[key] = { ...(store.users[key] || {}), controllerChannelId: ch.id };
+    save();
+    return ch.id;
+  })();
+
+  controllerLocks.set(key, task);
+  try {
+    return await task;
+  } finally {
+    controllerLocks.delete(key);
+  }
 }
 
 async function repostCards(guildId, userId, controllerId) {
@@ -181,6 +243,7 @@ function getSnowflakeTimestamp(snowflake) {
 }
 
 async function rolloverTelemetryCard(id, c) {
+  const oldMessageId = c.cardMessageId;
   const msg = await DiscordRequest(`channels/${c.controllerChannelId}/messages`, {
     method: 'POST',
     body: cardPanel(id, c),
@@ -188,6 +251,13 @@ async function rolloverTelemetryCard(id, c) {
   c.cardMessageId = msg.id;
   c.cardCreatedAt = Date.now();
   save();
+
+  // Delete the expired card so controller channel never accumulates duplicate cards
+  if (oldMessageId && oldMessageId !== msg.id) {
+    DiscordRequest(`channels/${c.controllerChannelId}/messages/${oldMessageId}`, {
+      method: 'DELETE',
+    }).catch(() => {});
+  }
 }
 
 async function processTelemetryQueue() {
@@ -196,7 +266,6 @@ async function processTelemetryQueue() {
 
   isProcessingTelemetry = true;
   const id = telemetryQueue.shift();
-  queuedCardIds.delete(id);
 
   let nextDelay = TELEMETRY_EDIT_INTERVAL_MS;
 
@@ -221,7 +290,7 @@ async function processTelemetryQueue() {
           const missingMsg = err?.status === 404 || code === 10008 || msgText.includes('10008');
 
           if (hitEditLimit || missingMsg) {
-            console.warn(`[Telemetry] Card ${id} hit ${hitEditLimit ? '30046 (1h edit cap)' : '404/10008'}; posting fresh card.`);
+            console.warn(`[Telemetry] Card ${id} hit ${hitEditLimit ? '30046 (1h edit cap)' : '404/10008'}; replacing card.`);
             await rolloverTelemetryCard(id, c);
           } else if (err?.status === 429) {
             const retrySec = Number(err?.retry_after || err?.rawError?.retry_after || 5);
@@ -236,6 +305,7 @@ async function processTelemetryQueue() {
   } catch (err) {
     console.error(`[Telemetry] Rollover/update error for ${id}:`, err.message);
   } finally {
+    queuedCardIds.delete(id);
     isProcessingTelemetry = false;
     if (telemetryQueue.length > 0) {
       setTimeout(processTelemetryQueue, nextDelay);
