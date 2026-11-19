@@ -22,6 +22,10 @@ const commands = [
     ]
   },
   {
+    name: 'cancel-staggered',
+    description: '🛑 Abort an in-progress staggered pipeline rollout immediately.',
+  },
+  {
     name: 'add-token',
     description: '🔐 Manage your security vault credential.',
     options: [
