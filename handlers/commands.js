@@ -1,7 +1,7 @@
 // handlers/commands.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
 import { DiscordRequest, slug, privateOverwrites, redactToken, sendDM, manageRole } from '../utils.js';
-import { stopAllRunnersForUser, stopRunner } from '../services/runner.js';
+import { stopAllRunnersForUser, stopRunner, startRunner } from '../services/runner.js';
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, amber: 0xfee75c, red: 0xed4245 };
 const MAX_OPEN_SETUPS = 3;
@@ -54,6 +54,7 @@ const helpEmbed = (trialDays = 7) => ({
         '• **`/delete-all-configs`** — Permanently purge all of your configuration pipelines and controller cards.\n' +
         '• **`/controller`** — Open or restore your private secured Command Center channel.\n' +
         '• **`/stop-all`** — Emergency halt all of your running configuration pipelines at once.\n' +
+        '• **`/start-staggered`** — Safely launch all paused configuration pipelines sequentially with a custom delay gap.\n' +
         '• **`/add-token`** — Register, list, or purge your account session credentials.\n' +
         '• **`/add-config`** — Create a new automated posting configuration.\n' +
         '• **`/allow-copy-config`** — Toggle your controller template sharing status on/off.\n' +
@@ -671,6 +672,42 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       content: stopped.length ? `⏹️ **Emergency Halt**: Successfully terminated ${stopped.length} active pipeline(s).` : 'ℹ️ No active pipelines were running.',
     }).catch(() => {});
     return;
+  }
+
+  // --- /start-staggered COMMAND ---
+  if (name === 'start-staggered') {
+    res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
+
+    const delaySecs = options.find((o) => o.name === 'delay_seconds')?.value || 20;
+    const mine = mineOf(guildId, user.id).filter(([, c]) => !c.running);
+
+    if (!mine.length) {
+      return editOriginal(token, { content: 'ℹ️ All of your configuration pipelines are already running or you have no active configs!' });
+    }
+
+    await editOriginal(token, { 
+      content: `🚀 **Staggered Sequential Launch Initiated!**\nActivating **${mine.length}** pipeline(s) one by one with a **${delaySecs}-second** gap between each...` 
+    });
+
+    let startedCount = 0;
+    for (const [cfgId, cfg] of mine) {
+      cfg.running = true;
+      cfg.lastError = null;
+      cfg.startedAt = Date.now();
+      saveStore(store);
+      
+      startRunner(cfgId, true, store, saveStore, refreshCard);
+      refreshCard(cfgId).catch(() => {});
+      startedCount++;
+
+      if (startedCount < mine.length) {
+        await new Promise((resolve) => setTimeout(resolve, delaySecs * 1000));
+      }
+    }
+
+    return editOriginal(token, { 
+      content: `✅ **Staggered Sequence Complete!** Successfully rolled out and activated all **${startedCount}** pipeline(s) safely.` 
+    });
   }
 
   if (name === 'add-config') {

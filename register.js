@@ -10,6 +10,18 @@ const commands = [
   { name: 'controller', description: '📂 Open or restore your secured Command Center channel.' },
   { name: 'stop-all', description: '⏹️ Emergency halt all active dispatch runners.' },
   {
+    name: 'start-staggered',
+    description: '🚀 Safely activate all paused configuration pipelines sequentially in waves.',
+    options: [
+      {
+        name: 'delay_seconds',
+        description: 'Delay gap in seconds between each config launch (default: 20s)',
+        type: 4, // INTEGER
+        required: false,
+      }
+    ]
+  },
+  {
     name: 'add-token',
     description: '🔐 Manage your security vault credential.',
     options: [

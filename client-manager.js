@@ -21,13 +21,27 @@ function getUserProxy(userId) {
 }
 
 export async function getUserClient(userId, token) {
-  // Always ensure a clean teardown if a client exists, forcing a fresh login with the current token
-  if (activeClients.has(userId)) {
-    const session = activeClients.get(userId);
-    try {
-      await session.client.destroy();
-    } catch (e) {}
-    activeClients.delete(userId);
+  if (!token) throw new Error('Token was unavailable to the client.');
+
+  const existingSession = activeClients.get(userId);
+
+  // If a session already exists, verify it and reuse it to prevent race conditions
+  if (existingSession) {
+    // If the token changed, we must destroy and recreate
+    if (existingSession.token !== token) {
+      try {
+        await existingSession.client.destroy();
+      } catch (e) {}
+      activeClients.delete(userId);
+    } else if (existingSession.client.isReady && existingSession.client.isReady()) {
+      return existingSession.client; // Reuse existing healthy client session!
+    } else {
+      // If client dropped connection, clean it up before re-logging in
+      try {
+        await existingSession.client.destroy();
+      } catch (e) {}
+      activeClients.delete(userId);
+    }
   }
 
   const userProxy = getUserProxy(userId);
@@ -44,9 +58,14 @@ export async function getUserClient(userId, token) {
 
   client.on('error', (err) => console.error(`[User ${userId}] WebSocket Error:`, err.message));
 
-  await client.login(token);
-  activeClients.set(userId, { client, token });
-  return client;
+  try {
+    await client.login(token);
+    activeClients.set(userId, { client, token });
+    return client;
+  } catch (err) {
+    activeClients.delete(userId);
+    throw new Error(`Failed to login user token: ${err.message}`);
+  }
 }
 
 export function stopUserClient(userId) {
@@ -57,4 +76,4 @@ export function stopUserClient(userId) {
     } catch (e) {}
     activeClients.delete(userId);
   }
-}    
+}
