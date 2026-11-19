@@ -10,6 +10,18 @@ const commands = [
   { name: 'controller', description: '📂 Open or restore your secured Command Center channel.' },
   { name: 'stop-all', description: '⏹️ Emergency halt all active dispatch runners.' },
   {
+    name: 'start-staggered',
+    description: '🚀 Safely activate all paused configuration pipelines sequentially in waves.',
+    options: [
+      {
+        name: 'delay_seconds',
+        description: 'Delay gap in seconds between each config launch (default: 20s)',
+        type: 4, // INTEGER
+        required: false,
+      }
+    ]
+  },
+  {
     name: 'add-token',
     description: '🔐 Manage your security vault credential.',
     options: [
@@ -55,6 +67,13 @@ const commands = [
     description: '🛠️ (Admin) Set the duration of the free trial in days.',
     options: [
       { type: 4, name: 'days', description: 'Number of days for the free trial', required: true }
+    ]
+  },
+  {
+    name: 'set-price',
+    description: '💎 (Admin) Set the base Lifetime Diamond Lock price (shorter tiers auto-scale proportionally).',
+    options: [
+      { type: 4, name: 'lifetime_dl', description: 'The new price in Diamond Locks (DLs) for Lifetime access', required: true }
     ]
   },
   {
