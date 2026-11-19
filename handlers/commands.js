@@ -1,7 +1,7 @@
 // handlers/commands.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
 import { DiscordRequest, slug, privateOverwrites, redactToken, sendDM, manageRole } from '../utils.js';
-import { stopAllRunnersForUser, stopRunner } from '../services/runner.js';
+import { stopAllRunnersForUser, stopRunner, startRunner } from '../services/runner.js';
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, amber: 0xfee75c, red: 0xed4245 };
 const MAX_OPEN_SETUPS = 3;
@@ -54,6 +54,7 @@ const helpEmbed = (trialDays = 7) => ({
         '• **`/delete-all-configs`** — Permanently purge all of your configuration pipelines and controller cards.\n' +
         '• **`/controller`** — Open or restore your private secured Command Center channel.\n' +
         '• **`/stop-all`** — Emergency halt all of your running configuration pipelines at once.\n' +
+        '• **`/start-staggered`** — Safely launch all paused configuration pipelines sequentially with a custom delay gap.\n' +
         '• **`/add-token`** — Register, list, or purge your account session credentials.\n' +
         '• **`/add-config`** — Create a new automated posting configuration.\n' +
         '• **`/allow-copy-config`** — Toggle your controller template sharing status on/off.\n' +
@@ -64,6 +65,7 @@ const helpEmbed = (trialDays = 7) => ({
       value:
         '• **`/store`** — Publish the official AutomateX license pricing and store showcase embed *(Admin)*.\n' +
         '• **`/set-trial-duration`** — Configure the active free trial duration in days *(Admin)*.\n' +
+        '• **`/set-price`** — Configure the base Lifetime Diamond Lock price *(Admin)*.\n' +
         '• **`/check-access`** — Verify subscription clearance and expiration status of a user *(Admin)*.\n' +
         '• **`/grant-access`** — Authorize a user with a specific subscription duration tier *(Admin)*.\n' +
         '• **`/revoke-access`** — Terminate clearance, purge credentials, and wipe user pipelines *(Admin)*.\n' +
@@ -109,12 +111,21 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
 
   store.settings ??= {};
   store.settings.trialDurationDays ??= 7;
+  store.settings.lifetimePrice ??= 100; // Default lifetime price in DLs
   const trialDays = store.settings.trialDurationDays;
+  const lifetimePrice = store.settings.lifetimePrice;
+
+  // Automatically derive proportional tier prices from Lifetime price
+  const dLife = lifetimePrice;
+  const d1m = Math.max(1, Math.round(lifetimePrice * 0.5));   // 50% of Lifetime
+  const d7 = Math.max(1, Math.round(lifetimePrice * 0.2));    // 20% of Lifetime
+  const d3 = Math.max(1, Math.round(lifetimePrice * 0.1));    // 10% of Lifetime
 
   if (name === 'help') return reply(res, { embeds: [helpEmbed(trialDays)] });
   if (!guildId) return ephemeral(res, '⚠️ **Context Error**: Command execution restricted to guild servers.');
 
-  if (name !== 'grant-access' && name !== 'revoke-access' && name !== 'promotion' && name !== 'store' && name !== 'set-trial-duration' && name !== 'copy-controller' && name !== 'allow-copy-config') {
+  const adminCommands = ['grant-access', 'revoke-access', 'promotion', 'store', 'set-trial-duration', 'set-price'];
+  if (!adminCommands.includes(name) && name !== 'copy-controller' && name !== 'allow-copy-config') {
     const access = store.access[user.id];
     const now = Date.now();
     
@@ -134,7 +145,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     store.users ??= {};
     store.users[`${guildId}:${user.id}`] ??= {};
     
-    // Toggle or enable sharing
     const currentState = store.users[`${guildId}:${user.id}`].shareable ?? false;
     const newState = !currentState;
     store.users[`${guildId}:${user.id}`].shareable = newState;
@@ -143,7 +153,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     const controllerId = store.users[`${guildId}:${user.id}`].controllerChannelId;
 
     if (newState && controllerId) {
-      // Send interactive sharing control card into their private controller channel
       await DiscordRequest(`channels/${controllerId}/messages`, {
         method: 'POST',
         body: {
@@ -170,10 +179,10 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     );
   }
 
-  // --- COPY CONTROLLER COMMAND (OPEN TO USERS WITH CONSENT CHECK) ---
+  // --- COPY CONTROLLER COMMAND ---
   if (name === 'copy-controller') {
     const sourceUser = options.find((o) => o.name === 'source')?.value;
-    const targetUser = options.find((o) => o.name === 'target')?.value || user.id; // Defaults to self if target omitted
+    const targetUser = options.find((o) => o.name === 'target')?.value || user.id;
 
     if (!sourceUser) {
       return ephemeral(res, '⚠️ Please provide the `source` operator whose controller you want to copy.');
@@ -183,7 +192,6 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       return ephemeral(res, '⚠️ Source and target operator cannot be the same.');
     }
 
-    // Check if the source user explicitly enabled sharing (unless copier is admin)
     store.users ??= {};
     const sourceUserData = store.users[`${guildId}:${sourceUser}`];
     const isSourceShareable = sourceUserData?.shareable ?? false;
@@ -242,7 +250,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
           channelId: cfg.channelId,
           text: cfg.text,
           delay: cfg.delay,
-          running: false, // SAFETY DEFAULT
+          running: false,
           startedAt: null,
           sent: 0,
           failed: 0,
@@ -290,6 +298,30 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     return notice(res, COLOR.green, '✅ Trial Duration Updated', `New free trial duration has been successfully set to **${daysOpt} day(s)**.`);
   }
 
+  // --- SET PRICE COMMAND (ADMIN ONLY) ---
+  if (name === 'set-price') {
+    if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
+
+    const lifetimeOpt = options.find((o) => o.name === 'lifetime_dl')?.value;
+    if (lifetimeOpt === undefined || lifetimeOpt < 0) {
+      return ephemeral(res, '⚠️ Please provide a valid Diamond Lock (DL) amount for Lifetime access.');
+    }
+
+    store.settings.lifetimePrice = lifetimeOpt;
+    saveStore(store);
+
+    const auto3d = Math.max(1, Math.round(lifetimeOpt * 0.1));
+    const auto7d = Math.max(1, Math.round(lifetimeOpt * 0.2));
+    const auto1m = Math.max(1, Math.round(lifetimeOpt * 0.5));
+
+    return notice(
+      res,
+      COLOR.green,
+      '💎 Base Price Updated & Proportions Scaled',
+      `Lifetime price successfully set to **${lifetimeOpt} DLs**.\n\nShorter tiers have automatically scaled:\n• **3 Days:** ${auto3d} DLs\n• **7 Days:** ${auto7d} DLs\n• **1 Month:** ${auto1m} DLs\n• **Lifetime:** ${lifetimeOpt} DLs`
+    );
+  }
+
   // --- STORE DISPLAY COMMAND (ADMIN ONLY) ---
   if (name === 'store') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
@@ -309,10 +341,10 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
                 'Package    Price (PHP/USD)   Diamond Locks   Configs\n' +
                 '───────────────────────────────────────────────────────\n' +
                 `🎁 Free    FREE ($0.00)      0 DLs (${trialDays}d)     5 Slots\n` +
-                '🥉 3 Days  ₱30 (~$0.55)      10 DLs          10 Slots\n' +
-                '🥈 7 Days  ₱60 (~$1.05)      20 DLs          25 Slots\n' +
-                '🥇 1 Month ₱150 (~$2.60)     50 DLs          50 Slots\n' +
-                '👑 Lifetime ₱300 (~$5.20)    100 DLs         Unlimited\n' +
+                `🥉 3 Days  ₱30 (~$0.55)      ${d3} DLs${d3 < 10 ? ' ' : ''}         10 Slots\n` +
+                `🥈 7 Days  ₱60 (~$1.05)      ${d7} DLs${d7 < 10 ? ' ' : ''}         25 Slots\n` +
+                `🥇 1 Month ₱150 (~$2.60)     ${d1m} DLs${d1m < 10 ? ' ' : ''}         50 Slots\n` +
+                `👑 Lifetime ₱300 (~$5.20)    ${dLife} DLs${dLife < 10 ? ' ' : ''}        Unlimited\n` +
                 '```',
               inline: false
             },
@@ -334,10 +366,10 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
                 custom_id: 'store_select_package',
                 placeholder: '💳 Click here to view package details...',
                 options: [
-                  { label: '3 Days Pass', value: 'pkg_3d', description: '₱30 (~$0.55 USD) / 10 DLs • 10 Config Slots', emoji: { name: '🥉' } },
-                  { label: '7 Days Pass', value: 'pkg_7d', description: '₱60 (~$1.05 USD) / 20 DLs • 25 Config Slots', emoji: { name: '🥈' } },
-                  { label: '1 Month Pass', value: 'pkg_1m', description: '₱150 (~$2.60 USD) / 50 DLs • 50 Config Slots', emoji: { name: '🥇' } },
-                  { label: 'Lifetime Pass', value: 'pkg_lifetime', description: '₱300 (~$5.20 USD) / 100 DLs • Unlimited Configs', emoji: { name: '👑' } }
+                  { label: '3 Days Pass', value: 'pkg_3d', description: `₱30 (~$0.55 USD) / ${d3} DLs • 10 Config Slots`, emoji: { name: '🥉' } },
+                  { label: '7 Days Pass', value: 'pkg_7d', description: `₱60 (~$1.05 USD) / ${d7} DLs • 25 Config Slots`, emoji: { name: '🥈' } },
+                  { label: '1 Month Pass', value: 'pkg_1m', description: `₱150 (~$2.60 USD) / ${d1m} DLs • 50 Config Slots`, emoji: { name: '🥇' } },
+                  { label: 'Lifetime Pass', value: 'pkg_lifetime', description: `₱300 (~$5.20 USD) / ${dLife} DLs • Unlimited Configs`, emoji: { name: '👑' } }
                 ]
               }
             ]
@@ -640,6 +672,42 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       content: stopped.length ? `⏹️ **Emergency Halt**: Successfully terminated ${stopped.length} active pipeline(s).` : 'ℹ️ No active pipelines were running.',
     }).catch(() => {});
     return;
+  }
+
+  // --- /start-staggered COMMAND ---
+  if (name === 'start-staggered') {
+    res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
+
+    const delaySecs = options.find((o) => o.name === 'delay_seconds')?.value || 20;
+    const mine = mineOf(guildId, user.id).filter(([, c]) => !c.running);
+
+    if (!mine.length) {
+      return editOriginal(token, { content: 'ℹ️ All of your configuration pipelines are already running or you have no active configs!' });
+    }
+
+    await editOriginal(token, { 
+      content: `🚀 **Staggered Sequential Launch Initiated!**\nActivating **${mine.length}** pipeline(s) one by one with a **${delaySecs}-second** gap between each...` 
+    });
+
+    let startedCount = 0;
+    for (const [cfgId, cfg] of mine) {
+      cfg.running = true;
+      cfg.lastError = null;
+      cfg.startedAt = Date.now();
+      saveStore(store);
+      
+      startRunner(cfgId, true, store, saveStore, refreshCard);
+      refreshCard(cfgId).catch(() => {});
+      startedCount++;
+
+      if (startedCount < mine.length) {
+        await new Promise((resolve) => setTimeout(resolve, delaySecs * 1000));
+      }
+    }
+
+    return editOriginal(token, { 
+      content: `✅ **Staggered Sequence Complete!** Successfully rolled out and activated all **${startedCount}** pipeline(s) safely.` 
+    });
   }
 
   if (name === 'add-config') {
