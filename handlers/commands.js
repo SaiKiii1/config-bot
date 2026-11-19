@@ -663,13 +663,13 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (name === 'stop-all') {
     res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
     const stopped = stopAllRunnersForUser(guildId, user.id, store, saveStore);
-    
-    for (const [id] of stopped) {
-      refreshCard(id).catch(() => {});
-    }
+
+    await Promise.allSettled(stopped.map(([id]) => refreshCard(id)));
 
     await editOriginal(token, {
-      content: stopped.length ? `⏹️ **Emergency Halt**: Successfully terminated ${stopped.length} active pipeline(s).` : 'ℹ️ No active pipelines were running.',
+      content: stopped.length
+        ? `⏹️ **Emergency Halt**: Successfully terminated ${stopped.length} active pipeline(s) and synced controller cards.`
+        : 'ℹ️ No active pipelines were running.',
     }).catch(() => {});
     return;
   }
