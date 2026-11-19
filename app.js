@@ -16,7 +16,7 @@ import express from 'express';
 import { getUserClient } from './client-manager.js';
 import { InteractionType, InteractionResponseType, verifyKeyMiddleware } from 'discord-interactions';
 import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential, cleanupExpiredDrafts } from './utils.js';
-import { startRunner, cleanupExpiredAccess } from './services/runner.js';
+import { startRunner, cleanupExpiredAccess, recoverStaggeredRollouts } from './services/runner.js';
 import { handleCommand } from './handlers/commands.js';
 import { handleComponent, handleModalSubmit, cardPanel } from './handlers/components.js';
 import { sendWelcomeMessage } from './handlers/events.js';
@@ -29,7 +29,8 @@ store.users ??= {};
 store.drafts ??= {};
 store.configs ??= {};
 store.credentials ??= {};
-store.access ??= {}; 
+store.access ??= {};
+store.staggered ??= {};
 const save = () => saveStore(store);
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, red: 0xed4245, grey: 0x4f545c };
@@ -153,6 +154,7 @@ async function repostCards(guildId, userId, controllerId) {
       try {
         const msg = await DiscordRequest(`channels/${controllerId}/messages`, { method: 'POST', body: cardPanel(id, c) });
         c.cardMessageId = msg.id;
+        c.cardCreatedAt = Date.now();
         restored++;
       } catch (err) {
         console.error("Failed to restore card UI:", err.message);
@@ -163,13 +165,91 @@ async function repostCards(guildId, userId, controllerId) {
   return restored;
 }
 
+// --- Serialized Telemetry Queue & 1-Hour Edit Limit (30046) Protection ---
+const CARD_MAX_AGE_MS = 55 * 60 * 1000; // Roll over at 55m (before Discord's 60m edit cap)
+const TELEMETRY_EDIT_INTERVAL_MS = 1300; // 1.3s spacing between card updates
+const telemetryQueue = [];
+const queuedCardIds = new Set();
+let isProcessingTelemetry = false;
+
+function getSnowflakeTimestamp(snowflake) {
+  try {
+    return Number((BigInt(snowflake) >> 22n) + 1420070400000n);
+  } catch {
+    return 0;
+  }
+}
+
+async function rolloverTelemetryCard(id, c) {
+  const msg = await DiscordRequest(`channels/${c.controllerChannelId}/messages`, {
+    method: 'POST',
+    body: cardPanel(id, c),
+  });
+  c.cardMessageId = msg.id;
+  c.cardCreatedAt = Date.now();
+  save();
+}
+
+async function processTelemetryQueue() {
+  if (isProcessingTelemetry) return;
+  if (telemetryQueue.length === 0) return;
+
+  isProcessingTelemetry = true;
+  const id = telemetryQueue.shift();
+  queuedCardIds.delete(id);
+
+  let nextDelay = TELEMETRY_EDIT_INTERVAL_MS;
+
+  try {
+    const c = store.configs[id];
+    if (c?.cardMessageId && c?.controllerChannelId) {
+      const createdAt = c.cardCreatedAt || getSnowflakeTimestamp(c.cardMessageId);
+      const isExpired = createdAt > 0 && (Date.now() - createdAt) >= CARD_MAX_AGE_MS;
+
+      if (isExpired) {
+        await rolloverTelemetryCard(id, c);
+      } else {
+        try {
+          await DiscordRequest(`channels/${c.controllerChannelId}/messages/${c.cardMessageId}`, {
+            method: 'PATCH',
+            body: cardPanel(id, c),
+          });
+        } catch (err) {
+          const code = err?.code || err?.rawError?.code;
+          const msgText = String(err?.message || '');
+          const hitEditLimit = code === 30046 || msgText.includes('30046') || msgText.includes('older than 1 hour');
+          const missingMsg = err?.status === 404 || code === 10008 || msgText.includes('10008');
+
+          if (hitEditLimit || missingMsg) {
+            console.warn(`[Telemetry] Card ${id} hit ${hitEditLimit ? '30046 (1h edit cap)' : '404/10008'}; posting fresh card.`);
+            await rolloverTelemetryCard(id, c);
+          } else if (err?.status === 429) {
+            const retrySec = Number(err?.retry_after || err?.rawError?.retry_after || 5);
+            nextDelay = Math.max(TELEMETRY_EDIT_INTERVAL_MS, Math.ceil(retrySec * 1000) + 250);
+            console.warn(`[Telemetry] Rate limited on card ${id}; backing off ${nextDelay}ms.`);
+          } else {
+            console.error(`Failed to refresh telemetry card ${id}:`, msgText);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[Telemetry] Rollover/update error for ${id}:`, err.message);
+  } finally {
+    isProcessingTelemetry = false;
+    if (telemetryQueue.length > 0) {
+      setTimeout(processTelemetryQueue, nextDelay);
+    }
+  }
+}
+
 const refreshCard = async (id) => {
   const c = store.configs[id];
   if (!c?.cardMessageId || !c?.controllerChannelId) return;
-  try {
-    await DiscordRequest(`channels/${c.controllerChannelId}/messages/${c.cardMessageId}`, { method: 'PATCH', body: cardPanel(id, c) });
-  } catch (err) {
-    console.error(`Failed to refresh telemetry card ${id}:`, err.message);
+  if (!queuedCardIds.has(id)) {
+    queuedCardIds.add(id);
+    telemetryQueue.push(id);
+    processTelemetryQueue();
   }
 };
 
@@ -278,9 +358,44 @@ app.post('/events', express.json(), (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Listening on port ${PORT}`);
-  for (const [id, c] of Object.entries(store.configs)) {
-    if (c.running) startRunner(id, false, store, save, refreshCard);
+
+  const toBigInt = (val) => {
+    try {
+      return val ? BigInt(val) : 0n;
+    } catch {
+      return 0n;
+    }
+  };
+
+  const runningEntries = Object.entries(store.configs)
+    .filter(([, c]) => c.running)
+    .sort(([, a], [, b]) => {
+      const idA = toBigInt(a.cardMessageId);
+      const idB = toBigInt(b.cardMessageId);
+      return idA < idB ? -1 : idA > idB ? 1 : 0;
+    });
+
+  const now = Date.now();
+  const nextUserSlot = new Map();
+  const DEFAULT_STAGGER_SEC = 20;
+
+  for (const [id, c] of runningEntries) {
+    const activeRollout = store.staggered?.[`${c.guildId}:${c.userId}`];
+    const staggerGapMs = activeRollout?.delayMs ? Number(activeRollout.delayMs) : DEFAULT_STAGGER_SEC * 1000;
+
+    const naturalDueAt = c.lastSentAt
+      ? c.lastSentAt + (c.delay * 1000)
+      : now + (c.delay * 1000);
+    const earliestSlot = nextUserSlot.get(c.userId) ?? (now + 3000);
+    const scheduledAt = Math.max(now + 3000, naturalDueAt, earliestSlot);
+
+    nextUserSlot.set(c.userId, scheduledAt + staggerGapMs);
+
+    const initialDelaySec = Math.max(3, Math.round((scheduledAt - now) / 1000));
+    startRunner(id, false, store, save, refreshCard, initialDelaySec);
   }
+
+  recoverStaggeredRollouts(store, save, refreshCard, nextUserSlot);
 
   cleanupExpiredAccess(store, save).catch(console.error);
   cleanupExpiredDrafts(store, save).catch(console.error);
