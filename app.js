@@ -137,7 +137,7 @@ async function ensureController(guildId, user) {
   const ch = await DiscordRequest(`guilds/${guildId}/channels`, {
     method: 'POST', body: { name: `controller-${slug(user.username)}`, type: 0, parent_id: process.env.CONTROLLER_CATEGORY_ID, topic: '🔒 Secured Command Center', permission_overwrites: privateOverwrites(guildId, user.id) },
   });
-  store.users[key] = { controllerChannelId: ch.id };
+  store.users[key] = { ...(store.users[key] || {}), controllerChannelId: ch.id };
   save();
   return ch.id;
 }
@@ -380,8 +380,12 @@ app.listen(PORT, () => {
   const DEFAULT_STAGGER_SEC = 20;
 
   for (const [id, c] of runningEntries) {
-    const activeRollout = store.staggered?.[`${c.guildId}:${c.userId}`];
-    const staggerGapMs = activeRollout?.delayMs ? Number(activeRollout.delayMs) : DEFAULT_STAGGER_SEC * 1000;
+    const userKey = `${c.guildId}:${c.userId}`;
+    const activeRollout = store.staggered?.[userKey];
+    const savedStaggerSec = store.users?.[userKey]?.staggerDelaySec;
+    const staggerGapMs = activeRollout?.delayMs
+      ? Number(activeRollout.delayMs)
+      : (savedStaggerSec ?? DEFAULT_STAGGER_SEC) * 1000;
 
     const naturalDueAt = c.lastSentAt
       ? c.lastSentAt + (c.delay * 1000)
