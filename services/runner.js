@@ -21,8 +21,9 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     const currentConfig = store.configs[id];
     if (!currentConfig || !currentConfig.running) return;
 
-    const jitterFactor = 1 + (Math.random() * 0.3 - 0.15);
-    const delayMs = Math.floor(baseDelaySeconds * 1000 * jitterFactor);
+    // Positive-only jitter (+4s to +8s)
+    const jitterSeconds = Math.floor(Math.random() * 5) + 4;
+    const delayMs = (baseDelaySeconds + jitterSeconds) * 1000;
     timers.set(id, setTimeout(tick, delayMs));
   };
 
@@ -100,9 +101,8 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       
       currentConfig.sent = (currentConfig.sent ?? 0) + 1;
       currentConfig.lastSentAt = Date.now();
-      currentConfig.lastError = null; // Clear previous error on successful dispatch
+      currentConfig.lastError = null;
       
-      // PERSIST & UPDATE CONTROLLER CARD LIVE
       saveStore(store);
       if (refreshCardCallback) {
         refreshCardCallback(id).catch(() => {});
@@ -128,7 +128,6 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       
       console.error(`Pipeline ${id} dispatch error:`, err.message);
       
-      // Detect if the failure was caused by an active channel slowmode or cooldown
       const isCooldownOrSlowmode = 
         errStatus === 429 || 
         err.message?.toLowerCase().includes('slowmode') || 
@@ -145,7 +144,6 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       
       if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
 
-      // --- SEND HEADS-UP DM NOTIFICATION WITH COOLDOWN FLAG ---
       await sendDM(currentConfig.userId, {
         embeds: [{
           color: 0xed4245,
