@@ -50,13 +50,28 @@ export async function DiscordRequest(endpoint, { method = 'GET', body, token } =
     const res = await fetch(`${API}/${endpoint}`, fetchOptions);
     clearTimeout(timeout);
     
-    // Automatically retry if Discord rate-limits the request
-    if (res.status === 429 && retries > 0) {
+    if (res.status === 429) {
       const data = await res.json().catch(() => ({}));
-      const retryAfterMs = Math.ceil((data.retry_after || 1) * 1000);
-      console.warn(`[API Rate Limit] ${endpoint} hit 429. Retrying in ${retryAfterMs}ms...`);
-      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
-      return DiscordRequest(endpoint, { method, body, token }, retries - 1);
+
+      // Error 30046 = Maximum edits to messages older than 1 hour reached (never retry)
+      if (data?.code === 30046) {
+        const err = new Error(`Discord 429 ${method} ${endpoint}: ${JSON.stringify(data)}`);
+        err.status = 429;
+        err.code = 30046;
+        throw err;
+      }
+
+      if (retries > 0) {
+        const retryAfterMs = Math.ceil((data.retry_after || 1) * 1000);
+        console.warn(`[API Rate Limit] ${endpoint} hit 429. Retrying in ${retryAfterMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+        return DiscordRequest(endpoint, { method, body, token }, retries - 1);
+      }
+
+      const err = new Error(`Discord 429 ${method} ${endpoint}: ${JSON.stringify(data)}`);
+      err.status = 429;
+      err.retry_after = data.retry_after;
+      throw err;
     }
 
     if (!res.ok) {
@@ -126,7 +141,7 @@ export function redactToken(token) {
 }
 
 const DB_FILE = new URL('./data.json', import.meta.url);
-const EMPTY = () => ({ users: {}, drafts: {}, configs: {}, botIntegrations: {}, credentials: {}, access: {} });
+const EMPTY = () => ({ users: {}, drafts: {}, configs: {}, botIntegrations: {}, credentials: {}, access: {}, staggered: {} });
 const SB_URL = process.env.SUPABASE_URL?.replace(/\/$/, '');
 const SB_KEY = process.env.SUPABASE_KEY;
 const USE_SB = Boolean(SB_URL && SB_KEY);
@@ -164,13 +179,14 @@ export function saveStore(store) {
   if (timer) return;
   timer = setTimeout(() => {
     timer = null;
-    const snapshot = JSON.parse(JSON.stringify(latest));
+    const serializedPayload = JSON.stringify({ key: 'store', value: latest });
+    latest = null;
     chain = chain
       .then(async () => {
         const res = await fetch(`${SB_URL}/rest/v1/kv?on_conflict=key`, {
           method: 'POST',
           headers: { ...sbHeaders(), Prefer: 'resolution=merge-duplicates' },
-          body: JSON.stringify({ key: 'store', value: snapshot }),
+          body: serializedPayload,
         });
         if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
       })
