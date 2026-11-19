@@ -13,7 +13,7 @@ global.File = globalThis.File;
 // app.js
 import 'dotenv/config';
 import express from 'express';
-import { getUserClient } from './client-manager.js';
+import { getUserClient, startIdleClientSweeper } from './client-manager.js';
 import { InteractionType, InteractionResponseType, verifyKeyMiddleware } from 'discord-interactions';
 import { DiscordRequest, loadStore, saveStore, slug, privateOverwrites, decryptCredential, cleanupExpiredDrafts } from './utils.js';
 import { startRunner, cleanupExpiredAccess, recoverStaggeredRollouts } from './services/runner.js';
@@ -400,6 +400,7 @@ app.listen(PORT, () => {
   }
 
   recoverStaggeredRollouts(store, save, refreshCard, nextUserSlot);
+  startIdleClientSweeper(store);
 
   cleanupExpiredAccess(store, save).catch(console.error);
   cleanupExpiredDrafts(store, save).catch(console.error);
