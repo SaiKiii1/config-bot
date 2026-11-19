@@ -1,11 +1,16 @@
 // handlers/commands.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
 import { DiscordRequest, slug, privateOverwrites, redactToken, sendDM, manageRole } from '../utils.js';
-import { stopAllRunnersForUser, stopRunner, startRunner } from '../services/runner.js';
+import {
+  stopAllRunnersForUser,
+  stopRunner,
+  startRunner,
+  startStaggeredRollout,
+  cancelStaggeredRollout,
+} from '../services/runner.js';
 
 const COLOR = { blurple: 0x5865f2, green: 0x57f287, amber: 0xfee75c, red: 0xed4245 };
 const MAX_OPEN_SETUPS = 3;
-const activeStaggeredRollouts = new Map();
 
 const reply = (res, data) =>
   res.send({
@@ -666,35 +671,34 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
 
     const rolloutKey = `${guildId}:${user.id}`;
-    const activeRollout = activeStaggeredRollouts.get(rolloutKey);
-    if (activeRollout) {
-      activeRollout.cancelled = true;
-      if (activeRollout.wakeUp) activeRollout.wakeUp();
-      activeStaggeredRollouts.delete(rolloutKey);
-    }
-
+    const hadActiveRollout = store.staggered?.[rolloutKey]?.status === 'active';
     const stopped = stopAllRunnersForUser(guildId, user.id, store, saveStore);
 
     await Promise.allSettled(stopped.map(([id]) => refreshCard(id)));
 
     await editOriginal(token, {
       content: stopped.length
-        ? `⏹️ **Emergency Halt**: Successfully terminated ${stopped.length} active pipeline(s)${activeRollout ? ', aborted the in-progress staggered rollout,' : ''} and synced controller cards.`
-        : activeRollout
+        ? `⏹️ **Emergency Halt**: Successfully terminated ${stopped.length} active pipeline(s)${hadActiveRollout ? ', aborted the in-progress staggered rollout,' : ''} and synced controller cards.`
+        : hadActiveRollout
           ? '⏹️ **Emergency Halt**: Aborted the in-progress staggered rollout. No active pipelines were running.'
           : 'ℹ️ No active pipelines were running.',
     }).catch(() => {});
     return;
   }
 
-  // --- /start-staggered COMMAND ---
+  // --- /start-staggered COMMAND (PERSISTED TO STORE) ---
   if (name === 'start-staggered') {
+    store.staggered ??= {};
     const rolloutKey = `${guildId}:${user.id}`;
-    if (activeStaggeredRollouts.has(rolloutKey)) {
-      return ephemeral(res, '⚠️ A staggered rollout is already in progress. Run `/cancel-staggered` first if you want to abort and restart it.');
-    }
+    const existing = store.staggered[rolloutKey];
 
-    res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
+    if (existing && existing.status === 'active') {
+      const nextUnix = Math.floor((existing.nextRunAt || Date.now()) / 1000);
+      return ephemeral(
+        res,
+        `⚠️ A staggered rollout is already in progress (**${existing.currentRound}/${existing.totalRounds}** launched, next round <t:${nextUnix}:R>). Run \`/cancel-staggered\` first if you want to abort and restart it.`
+      );
+    }
 
     const delaySecs = options.find((o) => o.name === 'delay_seconds')?.value || 20;
     const mine = mineOf(guildId, user.id)
@@ -706,82 +710,43 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       });
 
     if (!mine.length) {
-      return editOriginal(token, { content: 'ℹ️ All of your configuration pipelines are already running or you have no active configs!' });
+      return ephemeral(res, 'ℹ️ All of your configuration pipelines are already running or you have no active configs!');
     }
 
-    const rolloutState = {
-      cancelled: false,
-      startedCount: 0,
-      totalCount: mine.length,
-      wakeUp: null,
-    };
-    activeStaggeredRollouts.set(rolloutKey, rolloutState);
+    const configIds = mine.map(([cfgId]) => cfgId);
+    const totalDurationSec = (configIds.length - 1) * delaySecs;
+    const estFinishUnix = Math.floor((Date.now() + totalDurationSec * 1000) / 1000);
 
-    await editOriginal(token, {
-      content: `🚀 **Staggered Sequential Launch Initiated!**\nActivating **${mine.length}** pipeline(s) top-to-bottom with a **${delaySecs}-second** gap between each...\n*(Use \`/cancel-staggered\` at any time to stop the rollout.)*`
-    }).catch(() => {});
+    startStaggeredRollout({
+      guildId,
+      userId: user.id,
+      configIds,
+      delaySeconds: delaySecs,
+      store,
+      saveStore,
+      refreshCardCallback: refreshCard,
+    });
 
-    try {
-      for (const [cfgId, cfg] of mine) {
-        if (rolloutState.cancelled) break;
-        if (!store.configs[cfgId] || cfg.running) continue;
-
-        cfg.running = true;
-        cfg.lastError = null;
-        cfg.startedAt = Date.now();
-        saveStore(store);
-
-        startRunner(cfgId, true, store, saveStore, refreshCard);
-        refreshCard(cfgId).catch(() => {});
-        rolloutState.startedCount++;
-
-        if (rolloutState.startedCount < mine.length && !rolloutState.cancelled) {
-          await new Promise((resolve) => {
-            const timer = setTimeout(() => {
-              rolloutState.wakeUp = null;
-              resolve();
-            }, delaySecs * 1000);
-
-            rolloutState.wakeUp = () => {
-              clearTimeout(timer);
-              rolloutState.wakeUp = null;
-              resolve();
-            };
-          });
-        }
-      }
-    } finally {
-      if (activeStaggeredRollouts.get(rolloutKey) === rolloutState) {
-        activeStaggeredRollouts.delete(rolloutKey);
-      }
-    }
-
-    if (rolloutState.cancelled) {
-      return editOriginal(token, {
-        content: `🛑 **Staggered Sequence Cancelled!** Aborted after activating **${rolloutState.startedCount}/${rolloutState.totalCount}** pipeline(s).`
-      }).catch(() => {});
-    }
-
-    return editOriginal(token, {
-      content: `✅ **Staggered Sequence Complete!** Successfully rolled out and activated all **${rolloutState.startedCount}** pipeline(s) safely.`
-    }).catch(() => {});
+    return reply(res, {
+      content:
+        `🚀 **Staggered Sequential Launch Initiated (Saved to Database)!**\n` +
+        `Activating **${configIds.length}** pipeline(s) top-to-bottom with a **${delaySecs}-second** gap between each.\n` +
+        `⏱️ **Estimated Completion:** <t:${estFinishUnix}:R>\n` +
+        `🛡️ *Progress is persisted automatically—even if the server restarts mid-rollout, remaining rounds will resume on schedule.*\n` +
+        `*(Use \`/cancel-staggered\` at any time to stop the rollout.)*`,
+    });
   }
 
   // --- /cancel-staggered COMMAND ---
   if (name === 'cancel-staggered') {
-    const rolloutKey = `${guildId}:${user.id}`;
-    const rolloutState = activeStaggeredRollouts.get(rolloutKey);
+    const cancelled = cancelStaggeredRollout(guildId, user.id, store, saveStore);
 
-    if (!rolloutState) {
+    if (!cancelled) {
       return ephemeral(res, 'ℹ️ You do not have an active `/start-staggered` rollout in progress.');
     }
 
-    rolloutState.cancelled = true;
-    if (rolloutState.wakeUp) rolloutState.wakeUp();
-    activeStaggeredRollouts.delete(rolloutKey);
-
     return reply(res, {
-      content: `🛑 **Staggered Rollout Cancelled**: Stopped launching remaining pipelines (**${rolloutState.startedCount}/${rolloutState.totalCount}** already activated).\n*Note: Already-started pipelines will keep running. Use \`/stop-all\` to pause them.*`
+      content: `🛑 **Staggered Rollout Cancelled**: Stopped launching remaining pipelines (**${cancelled.currentRound}/${cancelled.totalRounds}** already activated).\n*Note: Already-started pipelines will keep running. Use \`/stop-all\` to pause them.*`
     });
   }
 
