@@ -298,8 +298,16 @@ async function executeStaggeredRound(rolloutKey, store, saveStore, refreshCardCa
 
 export function startStaggeredRollout({ guildId, userId, configIds, delaySeconds, store, saveStore, refreshCardCallback }) {
   store.staggered ??= {};
+  store.users ??= {};
   const rolloutKey = `${guildId}:${userId}`;
-  const delayMs = Math.max(1, Number(delaySeconds || 20)) * 1000;
+  const cleanDelaySec = Math.max(1, Number(delaySeconds || 20));
+  const delayMs = cleanDelaySec * 1000;
+
+  // Persist user's preferred stagger interval for future boot recoveries
+  store.users[rolloutKey] = {
+    ...(store.users[rolloutKey] || {}),
+    staggerDelaySec: cleanDelaySec,
+  };
 
   const schedule = {
     id: rolloutKey,
