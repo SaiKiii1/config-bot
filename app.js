@@ -231,6 +231,7 @@ async function repostCards(guildId, userId, controllerId) {
 const AUTO_SYNC_INTERVAL_MS = 7 * 60 * 1000; // Max 1 background edit per 7m (~8.5/hr, below Discord's 30046 cap)
 const TELEMETRY_EDIT_INTERVAL_MS = 1300; // 1.3s spacing between card PATCH calls
 const lastCardEditAt = new Map();
+const lastInitialSendSyncedAt = new Map();
 const pendingForceIds = new Set();
 const telemetryQueue = [];
 const queuedCardIds = new Set();
@@ -298,7 +299,18 @@ const refreshCard = async (id, { force = true } = {}) => {
   const c = store.configs[id];
   if (!c?.cardMessageId || !c?.controllerChannelId) return;
 
-  if (!force) {
+  const isFirstSendAfterStart =
+    !force &&
+    c.running &&
+    c.startedAt &&
+    c.lastSentAt &&
+    c.lastSentAt >= c.startedAt &&
+    lastInitialSendSyncedAt.get(id) !== c.startedAt;
+
+  if (isFirstSendAfterStart) {
+    lastInitialSendSyncedAt.set(id, c.startedAt);
+    pendingForceIds.add(id);
+  } else if (!force) {
     const lastEdit = lastCardEditAt.get(id) || 0;
     if (Date.now() - lastEdit < AUTO_SYNC_INTERVAL_MS) return;
   } else {
@@ -397,7 +409,6 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
       }
     }
   } else if (type === InteractionType.MESSAGE_COMPONENT) {
-    // CRITICAL FIX: Await handleComponent so Express doesn't drop the connection before res.send()
     await handleComponent(req, res, store, save, lookup, modal, setupPanel, handleComponent, validate, parseDelay, refreshCard, editOriginal, btn, row).catch(console.error);
   } else if (type === InteractionType.MODAL_SUBMIT) {
     await handleModalSubmit(req, res, store, save, lookup, validate, parseDelay, refreshCard, setupPanel).catch(console.error);
