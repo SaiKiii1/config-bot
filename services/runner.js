@@ -119,7 +119,7 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       
       saveStore(store);
       if (refreshCardCallback) {
-        refreshCardCallback(id).catch(() => {});
+        refreshCardCallback(id, { force: false }).catch(() => {});
       }
 
       scheduleNext(currentConfig.delay, true);
@@ -198,7 +198,7 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       currentConfig.lastError = reasonTitle;
       saveStore(store);
       
-      if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
+      if (refreshCardCallback) refreshCardCallback(id, { force: false }).catch(() => {});
 
       await sendDM(currentConfig.userId, {
         embeds: [{
