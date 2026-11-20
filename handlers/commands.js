@@ -60,7 +60,7 @@ const helpEmbed = (trialDays = 7) => ({
         '• **`/delete-all-configs`** — Permanently purge all of your configuration pipelines and controller cards.\n' +
         '• **`/controller`** — Open or restore your private secured Command Center channel.\n' +
         '• **`/stop-all`** — Emergency halt all of your running configuration pipelines at once.\n' +
-        '• **`/start-staggered`** — Safely launch all paused configuration pipelines sequentially with a custom delay gap.\n' +
+        '• **`/start-staggered`** — Safely launch all paused configuration pipelines in random or top-to-bottom order with a custom delay gap.\n' +
         '• **`/cancel-staggered`** — Abort an in-progress staggered pipeline rollout immediately.\n' +
         '• **`/add-token`** — Register, list, or purge your account session credentials.\n' +
         '• **`/add-config`** — Create a new automated posting configuration.\n' +
@@ -686,7 +686,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     return;
   }
 
-  // --- /start-staggered COMMAND (PERSISTED TO STORE) ---
+  // --- /start-staggered COMMAND (PERSISTED TO STORE WITH ORDER CHOICE) ---
   if (name === 'start-staggered') {
     store.staggered ??= {};
     const rolloutKey = `${guildId}:${user.id}`;
@@ -701,19 +701,39 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     }
 
     const delaySecs = options.find((o) => o.name === 'delay_seconds')?.value || 20;
-    const mine = mineOf(guildId, user.id)
-      .filter(([, c]) => !c.running)
-      .sort(([, a], [, b]) => {
-        const idA = a.cardMessageId ? BigInt(a.cardMessageId) : 0n;
-        const idB = b.cardMessageId ? BigInt(b.cardMessageId) : 0n;
-        return idA < idB ? -1 : idA > idB ? 1 : 0;
-      });
+    const orderMode = options.find((o) => o.name === 'order')?.value || 'random';
+    const mine = mineOf(guildId, user.id).filter(([, c]) => !c.running);
 
     if (!mine.length) {
       return ephemeral(res, 'ℹ️ All of your configuration pipelines are already running or you have no active configs!');
     }
 
-    const configIds = mine.map(([cfgId]) => cfgId);
+    let configIds;
+    if (orderMode === 'top_to_bottom') {
+      const toBigInt = (val) => {
+        try {
+          return val ? BigInt(val) : 0n;
+        } catch {
+          return 0n;
+        }
+      };
+      configIds = [...mine]
+        .sort(([, a], [, b]) => {
+          const idA = toBigInt(a.cardMessageId);
+          const idB = toBigInt(b.cardMessageId);
+          return idA < idB ? -1 : idA > idB ? 1 : 0;
+        })
+        .map(([cfgId]) => cfgId);
+    } else {
+      // Fisher-Yates shuffle (default: random)
+      configIds = mine.map(([cfgId]) => cfgId);
+      for (let i = configIds.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [configIds[i], configIds[j]] = [configIds[j], configIds[i]];
+      }
+    }
+
+    const orderLabel = orderMode === 'top_to_bottom' ? '⬇️ Top to Bottom' : '🎲 Randomized';
     const totalDurationSec = (configIds.length - 1) * delaySecs;
     const estFinishUnix = Math.floor((Date.now() + totalDurationSec * 1000) / 1000);
 
@@ -729,8 +749,8 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
 
     return reply(res, {
       content:
-        `🚀 **Staggered Sequential Launch Initiated (Saved to Database)!**\n` +
-        `Activating **${configIds.length}** pipeline(s) top-to-bottom with a **${delaySecs}-second** gap between each.\n` +
+        `🚀 **Staggered Launch Initiated (Saved to Database)!**\n` +
+        `Activating **${configIds.length}** pipeline(s) in **${orderLabel}** order with a **${delaySecs}-second** gap between each.\n` +
         `⏱️ **Estimated Completion:** <t:${estFinishUnix}:R>\n` +
         `🛡️ *Progress is persisted automatically—even if the server restarts mid-rollout, remaining rounds will resume on schedule.*\n` +
         `*(Use \`/cancel-staggered\` at any time to stop the rollout.)*`,
