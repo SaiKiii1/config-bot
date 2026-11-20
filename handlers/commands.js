@@ -1,7 +1,7 @@
 // handlers/commands.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
-import { DiscordRequest, slug, privateOverwrites, redactToken, sendDM, manageRole } from '../utils.js';
-import { stopUserClient } from '../client-manager.js';
+import { DiscordRequest, slug, privateOverwrites, redactToken, sendDM, manageRole, decryptCredential } from '../utils.js';
+import { getUserClient, stopUserClient } from '../client-manager.js';
 import {
   stopAllRunnersForUser,
   stopRunner,
@@ -43,20 +43,21 @@ function getMaxConfigs(userId, store) {
 const helpEmbed = (trialDays = 7) => ({
   color: 0x5865f2,
   title: '🛡️ AutomateX — Command Center & Guide',
-  description: 'Enterprise-grade Discord automation framework featuring humanized dispatch and secure credential vaulting.',
+  description: 'Enterprise-grade Discord automation framework featuring humanized dispatch, Spintax variations, and secure credential vaulting.',
   fields: [
     {
       name: '📋 Operational Workflow',
       value:
         '1️⃣ **`/add-token register`** — Register your single account token securely.\n' +
         '2️⃣ **`/add-config name`** — Provision an isolated configuration pipeline workspace.\n' +
-        '3️⃣ **Controller Panel** — Execute, test, and manage active dispatches.',
+        '3️⃣ **Controller Panel** — Execute, test, and manage active dispatches.\n' +
+        '💡 **Tip (Spintax):** Wrap phrases like `{WTS|Selling|Selling cheap}` in your message to randomize wording on every send.',
     },
     {
       name: '⚙️ Core User Commands',
       value:
         '• **`/help`** — Display this documentation and system guide.\n' +
-        '• **`/status`** — View your system telemetry, credential status, and clearance.\n' +
+        '• **`/status`** — View your system telemetry, active rollout progress, and clearance.\n' +
         '• **`/list-configs`** — See all of your active and saved configuration pipelines.\n' +
         '• **`/delete-all-configs`** — Permanently purge all of your configuration pipelines and controller cards.\n' +
         '• **`/controller`** — Open or restore your private secured Command Center channel.\n' +
@@ -65,6 +66,7 @@ const helpEmbed = (trialDays = 7) => ({
         '• **`/cancel-staggered`** — Abort an in-progress staggered pipeline rollout immediately.\n' +
         '• **`/add-token`** — Register, list, or purge your account session credentials.\n' +
         '• **`/add-config`** — Create a new automated posting configuration.\n' +
+        '• **`/duplicate-config`** — Clone an existing pipeline message and interval onto a new channel ID.\n' +
         '• **`/allow-copy-config`** — Toggle your controller template sharing status on/off.\n' +
         '• **`/copy-controller`** — Mirror another operator\'s shared controller pipelines.',
     },
@@ -605,16 +607,30 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     const mine = mineOf(guildId, user.id);
     const hasToken = Boolean(Object.keys(store.credentials[user.id] || {}).length);
     const clearance = store.access[user.id] || (user.id === ADMIN_ID ? { durationLabel: 'Admin Overwrite' } : null);
+    const runningCount = mine.filter(([, c]) => c.running).length;
+    const rollout = store.staggered?.[`${guildId}:${user.id}`];
+
+    const fields = [
+      { name: '🔒 Credential Vault', value: hasToken ? '✅ Provisioned' : '❌ Unregistered', inline: true },
+      { name: '🛡️ Clearance', value: clearance ? clearance.durationLabel : '❌ Revoked', inline: true },
+      { name: '⚡ Active Runners', value: `${runningCount}/${mine.length}`, inline: true },
+    ];
+
+    if (rollout && rollout.status === 'active') {
+      const nextUnix = Math.floor((rollout.nextRunAt || Date.now()) / 1000);
+      const gapSec = Math.round((rollout.delayMs || 20000) / 1000);
+      fields.push({
+        name: '🚀 Active Staggered Rollout',
+        value: `Launched **${rollout.currentRound}/${rollout.totalRounds}** pipeline(s) · Next launch <t:${nextUnix}:R> *(every ${gapSec}s)*`,
+        inline: false,
+      });
+    }
     
     return reply(res, {
       embeds: [{
         color: COLOR.green,
         title: '🟢 System Telemetry & Status',
-        fields: [
-          { name: '🔒 Credential Vault', value: hasToken ? '✅ Provisioned' : '❌ Unregistered', inline: true },
-          { name: '🛡️ Clearance', value: clearance ? clearance.durationLabel : '❌ Revoked', inline: true },
-          { name: '⚡ Active Runners', value: String(mine.filter(([, c]) => c.running).length), inline: true },
-        ],
+        fields,
       }],
     });
   }
@@ -631,8 +647,8 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         color: COLOR.blurple,
         title: `📋 Configuration Registry (${mine.length}/${limitLabel})`,
         description: ctrl ? `Manage active pipelines in <#${ctrl}>.` : undefined,
-        fields: mine.map(([, c]) => ({
-          name: `${c.running ? '🟢' : '🔴'} ${c.name.slice(0, 200)}`,
+        fields: mine.map(([cfgId, c]) => ({
+          name: `${c.running ? '🟢' : '🔴'} ${c.name.slice(0, 180)} (\`${cfgId}\`)`,
           value: `Dest: <#${c.channelId}> · Dispatches: \`${c.sent ?? 0}\``,
         })),
       }],
@@ -775,6 +791,130 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     return reply(res, {
       content: `🛑 **Staggered Rollout Cancelled**: Stopped launching remaining pipelines (**${cancelled.currentRound}/${cancelled.totalRounds}** already activated).\n*Note: Already-started pipelines will keep running. Use \`/stop-all\` to pause them.*`
     });
+  }
+
+  // --- /duplicate-config COMMAND ---
+  if (name === 'duplicate-config') {
+    const userCreds = store.credentials[user.id];
+    const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
+    const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
+
+    if (!activeToken) {
+      return notice(res, COLOR.red, '🚫 Authorization Blocked', 'Security policy requires a registered user credential before duplicating pipelines.\n\n👉 Run `/add-token register` first.');
+    }
+
+    const sourceQuery = options.find((o) => o.name === 'source')?.value?.trim();
+    const newChannelId = options.find((o) => o.name === 'channel_id')?.value?.trim();
+    const customName = options.find((o) => o.name === 'name')?.value?.trim()?.slice(0, 50);
+
+    if (!sourceQuery || !newChannelId) {
+      return ephemeral(res, '⚠️ Please provide both the source config ID/name and the target Channel ID.');
+    }
+
+    if (!/^\d{17,20}$/.test(newChannelId)) {
+      return ephemeral(res, '⚠️ Invalid Channel ID format. Please provide a valid 17–20 digit Discord Channel Snowflake ID.');
+    }
+
+    const maxConfigs = getMaxConfigs(user.id, store);
+    const saved = mineOf(guildId, user.id).length;
+    const open = Object.values(store.drafts || {}).filter((d) => d.userId === user.id && d.guildId === guildId).length;
+
+    if (saved + open >= maxConfigs) {
+      const limitStr = maxConfigs === Infinity ? 'Unlimited' : maxConfigs;
+      const tierLabel = store.access[user.id]?.durationLabel || 'Free Trial';
+      return notice(
+        res,
+        COLOR.red,
+        '⚠️ Quota Exceeded',
+        `Maximum limit of **${limitStr}** configuration(s) reached for your clearance tier (\`${tierLabel}\`).${
+          maxConfigs !== Infinity ? '\n\n👉 *Upgrade your pass in the store channel to unlock more configuration slots!*' : ''
+        }`
+      );
+    }
+
+    const mine = mineOf(guildId, user.id);
+    const matched = mine.find(
+      ([cfgId, cfg]) => cfgId === sourceQuery || cfg.name.toLowerCase() === sourceQuery.toLowerCase()
+    );
+
+    if (!matched) {
+      return notice(
+        res,
+        COLOR.amber,
+        '🔍 Configuration Not Found',
+        `Could not find any pipeline matching \`${sourceQuery}\`.\n\nCheck the short ID printed on your controller card (e.g., \`rq77h1\`) or run \`/list-configs\`.`
+      );
+    }
+
+    const [sourceId, sourceCfg] = matched;
+
+    try {
+      res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
+
+      const client = await getUserClient(user.id, activeToken.trim());
+      const ch = await client.channels.fetch(newChannelId);
+      if (!ch || !['GUILD_TEXT', 'GUILD_NEWS'].includes(ch.type)) {
+        return editOriginal(token, {
+          content: '',
+          embeds: [{ color: COLOR.red, title: '⚠️ Invalid Target Channel', description: `Channel \`${newChannelId}\` is not a valid text channel.` }],
+        });
+      }
+
+      const controllerId = await ensureController(guildId, user, store, saveStore);
+
+      let newCfgId = Math.random().toString(36).substring(2, 8);
+      while (store.configs[newCfgId]) {
+        newCfgId = Math.random().toString(36).substring(2, 8);
+      }
+
+      const clonedName = customName || sourceCfg.name;
+      store.configs[newCfgId] = {
+        userId: user.id,
+        username: user.username,
+        guildId,
+        controllerChannelId: controllerId,
+        cardMessageId: null,
+        name: clonedName,
+        channelId: newChannelId,
+        text: sourceCfg.text,
+        delay: sourceCfg.delay,
+        running: false,
+        startedAt: null,
+        sent: 0,
+        failed: 0,
+        lastSentAt: null,
+        lastError: null,
+        createdAt: Date.now(),
+      };
+
+      await repostCards(guildId, user.id, controllerId);
+      saveStore(store);
+
+      await editOriginal(token, {
+        content: '',
+        embeds: [{
+          color: COLOR.green,
+          title: '✅ Pipeline Duplicated Successfully',
+          description:
+            `Cloned **\`${sourceCfg.name}\`** (\`${sourceId}\`) into **\`${clonedName}\`** (\`${newCfgId}\`).\n\n` +
+            `📍 **New Target:** <#${newChannelId}>\n` +
+            `⏱️ **Interval:** Every ${sourceCfg.delay}s\n` +
+            `📂 **Command Center:** <#${controllerId}>\n` +
+            `🔒 *Created in a paused state—press Start on the card or run \`/start-staggered\` when ready.*`,
+          timestamp: new Date().toISOString(),
+        }],
+      });
+    } catch (err) {
+      console.error('[ERROR] Failed to execute /duplicate-config:', err?.message || err);
+      const errMsg = err?.code === 10003
+        ? 'Target channel does not exist or your account lacks access to it.'
+        : (err?.message || 'Unknown error');
+      await editOriginal(token, {
+        content: '',
+        embeds: [{ color: COLOR.red, title: '⚠️ Duplication Failed', description: `Details: \`${errMsg}\`.` }],
+      }).catch(() => {});
+    }
+    return;
   }
 
   if (name === 'add-config') {
