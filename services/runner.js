@@ -7,6 +7,21 @@ const staggeredTimers = new Map();
 const userNextDispatchAt = new Map();
 const USER_DISPATCH_MIN_GAP_MS = 2000;
 
+function resolveSpintax(text) {
+  if (!text || typeof text !== 'string') return text;
+  let resolved = text;
+  const hasSpintax = /\{([^{}|]+(?:\|[^{}|]+)+)\}/;
+  let passes = 0;
+  while (hasSpintax.test(resolved) && passes < 10) {
+    resolved = resolved.replace(/\{([^{}|]+(?:\|[^{}|]+)+)\}/g, (_, group) => {
+      const choices = group.split('|');
+      return choices[Math.floor(Math.random() * choices.length)];
+    });
+    passes++;
+  }
+  return resolved;
+}
+
 function isUnauthorizedError(err) {
   const status = err?.status || err?.httpStatus || err?.response?.status;
   const msg = String(err?.message || '').toLowerCase();
@@ -141,13 +156,15 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
         if (!store.configs[id] || !store.configs[id].running) return stopRunner(id, store);
       }
 
+      const outboundText = resolveSpintax(currentConfig.text);
+
       await channel.sendTyping().catch(() => {});
-      const typingDuration = Math.min(Math.max(currentConfig.text.length * 150, 1500), 6000);
+      const typingDuration = Math.min(Math.max(outboundText.length * 150, 1500), 6000);
       await new Promise((resolve) => setTimeout(resolve, typingDuration));
 
       if (!store.configs[id] || !store.configs[id].running) return stopRunner(id, store);
 
-      await channel.send({ content: currentConfig.text, allowed_mentions: { parse: [] } });
+      await channel.send({ content: outboundText, allowed_mentions: { parse: [] } });
       
       currentConfig.sent = (currentConfig.sent ?? 0) + 1;
       currentConfig.lastSentAt = Date.now();
@@ -447,10 +464,13 @@ export function stopAllRunnersForUser(guildId, userId, store, saveStore, refresh
 
 export async function cleanupExpiredAccess(store, saveStore) {
   const now = Date.now();
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
   let updated = false;
 
   for (const [userId, access] of Object.entries(store.access || {})) {
-    if (access && access.expiresAt !== 'permanent' && now > access.expiresAt) {
+    if (!access || access.expiresAt === 'permanent') continue;
+
+    if (now > access.expiresAt) {
       console.log(`[Auto-Cleanup] Access expired for user ${userId}. Sweeping credentials & roles...`);
       
       stopUserClient(userId);
@@ -489,6 +509,19 @@ export async function cleanupExpiredAccess(store, saveStore) {
       }).catch(() => {});
 
       updated = true;
+    } else if (access.expiresAt - now <= TWENTY_FOUR_HOURS_MS && !access.warned24h) {
+      access.warned24h = true;
+      updated = true;
+      const expireUnix = Math.floor(access.expiresAt / 1000);
+
+      await sendDM(userId, {
+        embeds: [{
+          color: 0xfee75c,
+          title: '⏰ SUBSCRIPTION EXPIRING IN LESS THAN 24 HOURS',
+          description: `Hello <@${userId}>! Your AutomateX subscription (\`${access.durationLabel || 'Standard Access'}\`) will expire <t:${expireUnix}:R> (<t:${expireUnix}:F>).\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Heads Up:** Once a subscription expires, all saved configurations, registered tokens, and controller cards are automatically cleared.\n\n👉 *Renew your pass in the store channel before expiration to keep your pipelines uninterrupted!*`,
+          timestamp: new Date().toISOString()
+        }]
+      }).catch(() => {});
     }
   }
 
