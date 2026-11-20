@@ -267,7 +267,6 @@ async function processTelemetryQueue() {
           const missingMsg = err?.status === 404 || code === 10008 || msgText.includes('10008');
 
           if (hitEditLimit) {
-            // Back off 7 minutes without deleting or reposting the card; Refresh button still works
             lastCardEditAt.set(id, Date.now());
             console.warn(`[Telemetry] Card ${id} hit 30046 hourly edit cap; backing off 7m.`);
           } else if (missingMsg) {
@@ -470,3 +469,25 @@ app.listen(PORT, () => {
     cleanupExpiredDrafts(store, save).catch(console.error);
   }, 15 * 60 * 1000);
 });
+
+// Flush store to Supabase cleanly before Railway container shutdowns/redeploys
+let isShuttingDown = false;
+async function handleShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[Shutdown] Received ${signal}. Flushing store to database before exit...`);
+  const forceExitTimer = setTimeout(() => process.exit(0), 4000);
+  forceExitTimer.unref();
+  try {
+    await Promise.resolve(saveStore(store));
+    console.log('[Shutdown] Store flushed successfully.');
+  } catch (err) {
+    console.error('[Shutdown] Failed to flush store:', err.message);
+  } finally {
+    clearTimeout(forceExitTimer);
+    process.exit(0);
+  }
+}
+
+process.once('SIGTERM', () => handleShutdown('SIGTERM'));
+process.once('SIGINT', () => handleShutdown('SIGINT'));
