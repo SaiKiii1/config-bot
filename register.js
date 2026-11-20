@@ -4,7 +4,7 @@ import { DiscordRequest } from './utils.js';
 
 const commands = [
   { name: 'help', description: '🛡️ Show Command Center framework documentation.' },
-  { name: 'status', description: '🟢 View system telemetry and security status.' },
+  { name: 'status', description: '🟢 View system telemetry, rollout progress, and security status.' },
   { name: 'list-configs', description: '📋 Display all active configuration pipelines.' },
   { name: 'delete-all-configs', description: '🗑️ Permanently delete all of your configuration pipelines.' },
   { name: 'controller', description: '📂 Open or restore your secured Command Center channel.' },
@@ -53,6 +53,30 @@ const commands = [
     name: 'add-config',
     description: '🔧 Provision a new automation pipeline.',
     options: [{ type: 3, name: 'name', description: 'Pipeline reference name', required: true }]
+  },
+  {
+    name: 'duplicate-config',
+    description: '📋 Clone an existing pipeline message and interval onto a new channel ID.',
+    options: [
+      {
+        type: 3,
+        name: 'source',
+        description: 'Config ID (shown on card, e.g. rq77h1) or exact Config Name to duplicate',
+        required: true,
+      },
+      {
+        type: 3,
+        name: 'channel_id',
+        description: 'New destination Channel ID for the cloned pipeline',
+        required: true,
+      },
+      {
+        type: 3,
+        name: 'name',
+        description: 'Optional custom name for the duplicated pipeline (defaults to original name)',
+        required: false,
+      }
+    ]
   },
   {
     name: 'allow-copy-config',
