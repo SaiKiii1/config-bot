@@ -18,6 +18,16 @@ const commands = [
         description: 'Delay gap in seconds between each config launch (default: 20s)',
         type: 4, // INTEGER
         required: false,
+      },
+      {
+        name: 'order',
+        description: 'Launch sequence for your pipelines (defaults to Random)',
+        type: 3, // STRING
+        required: false,
+        choices: [
+          { name: '🎲 Random (Recommended)', value: 'random' },
+          { name: '⬇️ Top to Bottom', value: 'top_to_bottom' },
+        ],
       }
     ]
   },
