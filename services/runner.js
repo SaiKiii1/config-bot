@@ -4,6 +4,7 @@ import { getUserClient, stopUserClient } from '../client-manager.js';
 
 const timers = new Map();
 const staggeredTimers = new Map();
+const completionTimers = new Map();
 const userNextDispatchAt = new Map();
 const USER_DISPATCH_MIN_GAP_MS = 2000;
 
@@ -316,6 +317,11 @@ function clearStaggeredTimer(rolloutKey) {
     clearTimeout(handle);
     staggeredTimers.delete(rolloutKey);
   }
+  const completionHandle = completionTimers.get(rolloutKey);
+  if (completionHandle) {
+    clearTimeout(completionHandle);
+    completionTimers.delete(rolloutKey);
+  }
 }
 
 function armStaggeredTimer(rolloutKey, delayMs, store, saveStore, refreshCardCallback) {
@@ -329,6 +335,87 @@ function armStaggeredTimer(rolloutKey, delayMs, store, saveStore, refreshCardCal
   staggeredTimers.set(rolloutKey, handle);
 }
 
+async function sendStaggeredCompletionSummary(snapshot, store) {
+  const { rolloutKey, guildId, userId, launchedIds, baselineStats, createdAt, totalRounds } = snapshot;
+
+  const controllerChannelId =
+    store.users?.[rolloutKey]?.controllerChannelId ||
+    Object.values(store.configs || {}).find((c) => c.guildId === guildId && c.userId === userId && c.controllerChannelId)?.controllerChannelId;
+
+  if (!controllerChannelId) return;
+
+  let sentCount = 0;
+  let inFlightCount = 0;
+  const failedItems = [];
+
+  for (const cfgId of launchedIds) {
+    const cfg = store.configs?.[cfgId];
+    if (!cfg) continue;
+
+    const base = baselineStats?.[cfgId] || { sent: 0, failed: 0 };
+    const sentDelta = (cfg.sent ?? 0) - base.sent;
+    const failedDelta = (cfg.failed ?? 0) - base.failed;
+
+    if (sentDelta > 0 && !cfg.lastError) {
+      sentCount++;
+    } else if (failedDelta > 0 || cfg.lastError || !cfg.running) {
+      const reason = cfg.lastError ? cfg.lastError.slice(0, 70) : 'Paused before dispatch';
+      failedItems.push(`• **${cfg.name}** (\`${cfgId}\`) — ${reason}`);
+    } else {
+      inFlightCount++;
+    }
+  }
+
+  const totalLaunched = launchedIds.length;
+  const elapsedSec = Math.max(1, Math.round((Date.now() - createdAt) / 1000));
+  const mins = Math.floor(elapsedSec / 60);
+  const secs = elapsedSec % 60;
+  const durationText = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+  const embedColor =
+    failedItems.length === 0 ? 0x57f287 : sentCount > 0 ? 0xfee75c : 0xed4245;
+
+  const fields = [
+    { name: '🚀 Pipelines Launched', value: `**${totalLaunched}/${totalRounds}**`, inline: true },
+    { name: '✅ Initial Send OK', value: `**${sentCount}**`, inline: true },
+    { name: '❌ Failed / Issues', value: `**${failedItems.length}**`, inline: true },
+    { name: '⏱️ Total Rollout Time', value: `\`${durationText}\``, inline: true },
+  ];
+
+  if (inFlightCount > 0) {
+    fields.push({ name: '⏳ Finishing Typing', value: `**${inFlightCount}**`, inline: true });
+  }
+
+  if (failedItems.length > 0) {
+    const preview = failedItems.slice(0, 8).join('\n');
+    const extra = failedItems.length > 8 ? `\n*...and ${failedItems.length - 8} more.*` : '';
+    fields.push({
+      name: '⚠️ Pipelines Needing Attention',
+      value: `${preview}${extra}`,
+      inline: false,
+    });
+  }
+
+  await DiscordRequest(`channels/${controllerChannelId}/messages`, {
+    method: 'POST',
+    body: {
+      content: `<@${userId}>`,
+      allowed_mentions: { users: [userId] },
+      embeds: [{
+        color: embedColor,
+        title: '🏁 STAGGERED ROLLOUT COMPLETE',
+        description:
+          'All queued pipelines in your `/start-staggered` wave have finished launching and are now running on their scheduled intervals.',
+        fields,
+        footer: { text: 'AutomateX Telemetry • Wave Summary' },
+        timestamp: new Date().toISOString(),
+      }],
+    },
+  }).catch((err) => {
+    console.warn(`[Staggered] Could not send completion summary to ${controllerChannelId}:`, err.message);
+  });
+}
+
 async function executeStaggeredRound(rolloutKey, store, saveStore, refreshCardCallback) {
   store.staggered ??= {};
   const schedule = store.staggered[rolloutKey];
@@ -337,6 +424,7 @@ async function executeStaggeredRound(rolloutKey, store, saveStore, refreshCardCa
     return;
   }
 
+  schedule.launchedConfigIds ??= [];
   let pendingIds = Array.isArray(schedule.pendingConfigIds) ? [...schedule.pendingConfigIds] : [];
   let nextCfgId = null;
 
@@ -356,6 +444,7 @@ async function executeStaggeredRound(rolloutKey, store, saveStore, refreshCardCa
     cfg.lastError = null;
     cfg.startedAt = Date.now();
     schedule.currentRound = (schedule.currentRound ?? 0) + 1;
+    schedule.launchedConfigIds.push(nextCfgId);
 
     startRunner(nextCfgId, true, store, saveStore, refreshCardCallback);
     if (refreshCardCallback) refreshCardCallback(nextCfgId).catch(() => {});
@@ -366,9 +455,28 @@ async function executeStaggeredRound(rolloutKey, store, saveStore, refreshCardCa
 
   if (isFinished) {
     console.log(`[Staggered] Completed rollout ${rolloutKey} (${schedule.currentRound}/${schedule.totalRounds} launched).`);
+    const snapshot = {
+      rolloutKey,
+      guildId: schedule.guildId,
+      userId: schedule.userId,
+      launchedIds: [...schedule.launchedConfigIds],
+      baselineStats: { ...(schedule.baselineStats || {}) },
+      createdAt: schedule.createdAt || Date.now(),
+      totalRounds: schedule.totalRounds || schedule.launchedConfigIds.length,
+    };
+
     delete store.staggered[rolloutKey];
     clearStaggeredTimer(rolloutKey);
     saveStore(store);
+
+    // Wait 8.5s so the final launched pipeline finishes its typing indicator and initial send
+    const summaryHandle = setTimeout(() => {
+      completionTimers.delete(rolloutKey);
+      sendStaggeredCompletionSummary(snapshot, store).catch((err) => {
+        console.error(`[Staggered] Summary error for ${rolloutKey}:`, err.message);
+      });
+    }, 8500);
+    completionTimers.set(rolloutKey, summaryHandle);
   } else {
     schedule.pendingConfigIds = pendingIds;
     schedule.nextRunAt = nextRunAt;
@@ -395,6 +503,17 @@ export function startStaggeredRollout({ guildId, userId, configIds, delaySeconds
     staggerDelaySec: cleanDelaySec,
   };
 
+  const baselineStats = {};
+  for (const cfgId of configIds) {
+    const cfg = store.configs?.[cfgId];
+    if (cfg) {
+      baselineStats[cfgId] = {
+        sent: cfg.sent ?? 0,
+        failed: cfg.failed ?? 0,
+      };
+    }
+  }
+
   const schedule = {
     id: rolloutKey,
     guildId,
@@ -405,6 +524,8 @@ export function startStaggeredRollout({ guildId, userId, configIds, delaySeconds
     delayMs,
     nextRunAt: Date.now(),
     pendingConfigIds: [...configIds],
+    launchedConfigIds: [],
+    baselineStats,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -421,9 +542,9 @@ export function cancelStaggeredRollout(guildId, userId, store, saveStore) {
   store.staggered ??= {};
   const rolloutKey = `${guildId}:${userId}`;
   const existing = store.staggered[rolloutKey];
+  clearStaggeredTimer(rolloutKey);
   if (!existing) return null;
 
-  clearStaggeredTimer(rolloutKey);
   delete store.staggered[rolloutKey];
   saveStore(store);
   return existing;
