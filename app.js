@@ -227,38 +227,14 @@ async function repostCards(guildId, userId, controllerId) {
   return restored;
 }
 
-// --- Serialized Telemetry Queue & 1-Hour Edit Limit (30046) Protection ---
-const CARD_MAX_AGE_MS = 55 * 60 * 1000; // Roll over at 55m (before Discord's 60m edit cap)
-const TELEMETRY_EDIT_INTERVAL_MS = 1300; // 1.3s spacing between card updates
+// --- Serialized Telemetry Queue with 7-Minute Throttled Auto-Sync (Zero Card Duplication) ---
+const AUTO_SYNC_INTERVAL_MS = 7 * 60 * 1000; // Max 1 background edit per 7m (~8.5/hr, below Discord's 30046 cap)
+const TELEMETRY_EDIT_INTERVAL_MS = 1300; // 1.3s spacing between card PATCH calls
+const lastCardEditAt = new Map();
+const pendingForceIds = new Set();
 const telemetryQueue = [];
 const queuedCardIds = new Set();
 let isProcessingTelemetry = false;
-
-function getSnowflakeTimestamp(snowflake) {
-  try {
-    return Number((BigInt(snowflake) >> 22n) + 1420070400000n);
-  } catch {
-    return 0;
-  }
-}
-
-async function rolloverTelemetryCard(id, c) {
-  const oldMessageId = c.cardMessageId;
-  const msg = await DiscordRequest(`channels/${c.controllerChannelId}/messages`, {
-    method: 'POST',
-    body: cardPanel(id, c),
-  });
-  c.cardMessageId = msg.id;
-  c.cardCreatedAt = Date.now();
-  save();
-
-  // Delete the expired card so controller channel never accumulates duplicate cards
-  if (oldMessageId && oldMessageId !== msg.id) {
-    DiscordRequest(`channels/${c.controllerChannelId}/messages/${oldMessageId}`, {
-      method: 'DELETE',
-    }).catch(() => {});
-  }
-}
 
 async function processTelemetryQueue() {
   if (isProcessingTelemetry) return;
@@ -266,32 +242,38 @@ async function processTelemetryQueue() {
 
   isProcessingTelemetry = true;
   const id = telemetryQueue.shift();
+  const isForced = pendingForceIds.has(id);
+  pendingForceIds.delete(id);
 
   let nextDelay = TELEMETRY_EDIT_INTERVAL_MS;
 
   try {
     const c = store.configs[id];
     if (c?.cardMessageId && c?.controllerChannelId) {
-      const createdAt = c.cardCreatedAt || getSnowflakeTimestamp(c.cardMessageId);
-      const isExpired = createdAt > 0 && (Date.now() - createdAt) >= CARD_MAX_AGE_MS;
+      const lastEdit = lastCardEditAt.get(id) || 0;
+      const withinThrottleWindow = !isForced && (Date.now() - lastEdit) < AUTO_SYNC_INTERVAL_MS;
 
-      if (isExpired) {
-        await rolloverTelemetryCard(id, c);
-      } else {
+      if (!withinThrottleWindow) {
         try {
           await DiscordRequest(`channels/${c.controllerChannelId}/messages/${c.cardMessageId}`, {
             method: 'PATCH',
             body: cardPanel(id, c),
           });
+          lastCardEditAt.set(id, Date.now());
         } catch (err) {
           const code = err?.code || err?.rawError?.code;
           const msgText = String(err?.message || '');
           const hitEditLimit = code === 30046 || msgText.includes('30046') || msgText.includes('older than 1 hour');
           const missingMsg = err?.status === 404 || code === 10008 || msgText.includes('10008');
 
-          if (hitEditLimit || missingMsg) {
-            console.warn(`[Telemetry] Card ${id} hit ${hitEditLimit ? '30046 (1h edit cap)' : '404/10008'}; replacing card.`);
-            await rolloverTelemetryCard(id, c);
+          if (hitEditLimit) {
+            // Back off 7 minutes without deleting or reposting the card; Refresh button still works
+            lastCardEditAt.set(id, Date.now());
+            console.warn(`[Telemetry] Card ${id} hit 30046 hourly edit cap; backing off 7m.`);
+          } else if (missingMsg) {
+            c.cardMessageId = null;
+            save();
+            console.warn(`[Telemetry] Card ${id} message missing (404/10008); cleared stale message ID.`);
           } else if (err?.status === 429) {
             const retrySec = Number(err?.retry_after || err?.rawError?.retry_after || 5);
             nextDelay = Math.max(TELEMETRY_EDIT_INTERVAL_MS, Math.ceil(retrySec * 1000) + 250);
@@ -303,7 +285,7 @@ async function processTelemetryQueue() {
       }
     }
   } catch (err) {
-    console.error(`[Telemetry] Rollover/update error for ${id}:`, err.message);
+    console.error(`[Telemetry] Update error for ${id}:`, err.message);
   } finally {
     queuedCardIds.delete(id);
     isProcessingTelemetry = false;
@@ -313,9 +295,17 @@ async function processTelemetryQueue() {
   }
 }
 
-const refreshCard = async (id) => {
+const refreshCard = async (id, { force = true } = {}) => {
   const c = store.configs[id];
   if (!c?.cardMessageId || !c?.controllerChannelId) return;
+
+  if (!force) {
+    const lastEdit = lastCardEditAt.get(id) || 0;
+    if (Date.now() - lastEdit < AUTO_SYNC_INTERVAL_MS) return;
+  } else {
+    pendingForceIds.add(id);
+  }
+
   if (!queuedCardIds.has(id)) {
     queuedCardIds.add(id);
     telemetryQueue.push(id);
