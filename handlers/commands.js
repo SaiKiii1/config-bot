@@ -1,6 +1,7 @@
 // handlers/commands.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
 import { DiscordRequest, slug, privateOverwrites, redactToken, sendDM, manageRole } from '../utils.js';
+import { stopUserClient } from '../client-manager.js';
 import {
   stopAllRunnersForUser,
   stopRunner,
@@ -236,10 +237,13 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     try {
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
 
+      const targetUserInfo = await DiscordRequest(`users/${targetUser}`).catch(() => null);
+      const targetUsername = targetUserInfo?.username || 'operator';
+
       let targetControllerId = store.users[`${guildId}:${targetUser}`]?.controllerChannelId;
       
       if (!targetControllerId) {
-        const targetUserObj = { id: targetUser, username: 'TargetOperator' };
+        const targetUserObj = { id: targetUser, username: targetUsername };
         targetControllerId = await ensureController(guildId, targetUserObj, store, saveStore);
       }
 
@@ -249,7 +253,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         
         store.configs[newCfgId] = {
           userId: targetUser,
-          username: 'TargetOperator',
+          username: targetUsername,
           guildId: guildId,
           controllerChannelId: targetControllerId,
           cardMessageId: null,
@@ -529,6 +533,9 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     const reasonOpt = options.find(o => o.name === 'reason');
     const reason = reasonOpt ? reasonOpt.value : 'Access revoked by the Administrator.';
     
+    stopUserClient(targetUser);
+    cancelStaggeredRollout(guildId, targetUser, store, saveStore);
+
     delete store.access[targetUser];
     delete store.credentials[targetUser];
 
