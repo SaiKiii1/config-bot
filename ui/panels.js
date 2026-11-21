@@ -129,19 +129,6 @@ export const helpEmbed = (trialDays = 7) => ({
         '• **`/help`** — Display this documentation and system guide.',
     },
     {
-      name: '🔑 Administration & Management Tools',
-      value:
-        '• **`/store`** — Publish the AutomateX pricing and store embed *(Admin)*.\n' +
-        '• **`/set-trial-duration`** — Set the free trial duration in days *(Admin)*.\n' +
-        '• **`/set-price`** — Configure the base Lifetime DL price *(Admin)*.\n' +
-        '• **`/check-access`** — Inspect a user\'s subscription clearance *(Admin)*.\n' +
-        '• **`/grant-access`** — Grant subscription access to a user *(Admin)*.\n' +
-        '• **`/extend-access`** — Extend an active subscription without wiping data *(Admin)*.\n' +
-        '• **`/revoke-access`** — Revoke clearance and wipe user pipelines *(Admin)*.\n' +
-        '• **`/promotion`** — Broadcast the official launch announcement *(Admin)*.\n' +
-        '• **`/terms-of-service`** — Publish the official Terms of Service *(Admin)*.',
-    },
-    {
       name: '🧭 Server Guide & Channels',
       value:
         '• <#1567854828670025748> — Review our legal policies, safety heuristics, and terms of service.\n' +
@@ -152,5 +139,34 @@ export const helpEmbed = (trialDays = 7) => ({
     },
   ],
   footer: { text: `AutomateX • Current Trial Duration: ${trialDays} Days` },
+  timestamp: new Date().toISOString(),
+});
+
+export const adminHelpEmbed = (trialDays = 7) => ({
+  color: COLOR.amber,
+  title: '🔑 AutomateX — Administrator Command Reference',
+  description: 'Restricted management commands available only to the configured system administrator.',
+  fields: [
+    {
+      name: '🛡️ Access & Subscription Management',
+      value:
+        '• **`/check-access`** — Verify subscription clearance and expiration status of a user.\n' +
+        '• **`/grant-access`** — Authorize a user with a specific subscription duration tier.\n' +
+        '• **`/extend-access`** — Add extra time to an active user without wiping their setup.\n' +
+        '• **`/revoke-access`** — Terminate clearance, purge credentials, and wipe user pipelines.\n' +
+        '• **`/copy-controller`** — Use optional `target` parameter to mirror configs onto any user.',
+    },
+    {
+      name: '🏪 Store, Pricing & Broadcast Tools',
+      value:
+        '• **`/store`** — Publish the official AutomateX license pricing and store showcase embed.\n' +
+        '• **`/set-trial-duration`** — Configure the active free trial duration in days.\n' +
+        '• **`/set-price`** — Configure the base Lifetime Diamond Lock price (auto-scales tiers).\n' +
+        '• **`/promotion`** — Broadcast the official AutomateX launch announcement embed.\n' +
+        '• **`/terms-of-service`** — Publish the official legal Terms of Service embed.\n' +
+        '• **`/admin-help`** — Display this administrator command reference.',
+    },
+  ],
+  footer: { text: `AutomateX Admin Reference • Active Free Trial: ${trialDays} Days` },
   timestamp: new Date().toISOString(),
 });
