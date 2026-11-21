@@ -1,7 +1,7 @@
 // handlers/commands/index.js
 import { COLOR } from '../../config/constants.js';
 import { ephemeral, notice } from '../../ui/primitives.js';
-import { handleHelp, handleDiagnose, handleStatus, handleController } from './diagnostics.js';
+import { handleHelp, handleAdminHelp, handleDiagnose, handleStatus, handleController } from './diagnostics.js';
 import {
   handleListConfigs,
   handleDeleteAllConfigs,
@@ -10,7 +10,9 @@ import {
   handleEditDelayAll,
   handlePreviewSpintax,
   handleStartStaggered,
+  handleCancelStaggered,
   handleAddConfig,
+  handleDuplicateConfig,
 } from './pipelines.js';
 import { handleAddToken } from './tokens.js';
 import { handleAllowCopyConfig, handleCopyController } from './sharing.js';
@@ -26,6 +28,7 @@ import {
 } from './admin.js';
 
 const PUBLIC_OR_ADMIN_COMMANDS = new Set([
+  'admin-help',
   'grant-access',
   'extend-access',
   'revoke-access',
@@ -38,6 +41,7 @@ const PUBLIC_OR_ADMIN_COMMANDS = new Set([
 ]);
 
 const COMMAND_HANDLERS = {
+  'admin-help': handleAdminHelp,
   diagnose: handleDiagnose,
   status: handleStatus,
   controller: handleController,
@@ -48,7 +52,9 @@ const COMMAND_HANDLERS = {
   'edit-delay-all': handleEditDelayAll,
   'preview-spintax': handlePreviewSpintax,
   'start-staggered': handleStartStaggered,
+  'cancel-staggered': handleCancelStaggered,
   'add-config': handleAddConfig,
+  'duplicate-config': handleDuplicateConfig,
   'add-token': handleAddToken,
   'allow-copy-config': handleAllowCopyConfig,
   'copy-controller': handleCopyController,
