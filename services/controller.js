@@ -4,6 +4,7 @@ import { slug } from '../utils/validators.js';
 import { cardPanel } from '../ui/panels.js';
 
 const controllerLocks = new Map();
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function ensureController(guildId, userIdOrUser, store, save) {
   const user = typeof userIdOrUser === 'string' ? { id: userIdOrUser, username: 'user' } : userIdOrUser;
@@ -99,6 +100,7 @@ export async function repostCards(guildId, userId, controllerId, store, save) {
       }
     }
     if (!ok) {
+      if (restored > 0) await sleep(1100);
       c.controllerChannelId = controllerId;
       try {
         const msg = await DiscordRequest(`channels/${controllerId}/messages`, {
