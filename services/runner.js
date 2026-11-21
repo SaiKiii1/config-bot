@@ -1,10 +1,16 @@
 // services/runner.js
-import { DiscordRequest, decryptCredential, sendDM, manageRole } from '../utils.js';
-import { getUserClient, stopUserClient } from '../client-manager.js';
+import { COLOR } from '../config/constants.js';
+import { decryptCredential } from '../utils/crypto.js';
+import { sendDM } from '../utils/discord.js';
+import { previewSpintax } from '../utils/validators.js';
+import { getUserClient } from '../client-manager.js';
+import { purgeExpiredUser, runCleanupExpiredAccess } from './access-cleanup.js';
+
+export { recoverStaggeredRollouts } from './staggered.js';
 
 const timers = new Map();
 
-export function stopRunner(id, store) {
+export function stopRunner(id) {
   const handle = timers.get(id);
   if (handle) {
     clearTimeout(handle);
@@ -12,64 +18,47 @@ export function stopRunner(id, store) {
   }
 }
 
-export function startRunner(id, immediate = true, store, saveStore, refreshCardCallback) {
-  stopRunner(id, store);
+export function startRunner(id, immediate = true, store, saveStore, refreshCardCallback, initialDelaySec = null) {
+  stopRunner(id);
   const c = store.configs[id];
   if (!c) return;
 
-  const scheduleNext = (baseDelaySeconds) => {
+  const scheduleNext = (baseDelaySeconds, applyJitter = true) => {
     const currentConfig = store.configs[id];
     if (!currentConfig || !currentConfig.running) return;
 
-    const jitterFactor = 1 + (Math.random() * 0.3 - 0.15);
-    const delayMs = Math.floor(baseDelaySeconds * 1000 * jitterFactor);
+    const jitterFactor = applyJitter ? 1 + (Math.random() * 0.3 - 0.15) : 1;
+    const delayMs = Math.max(1000, Math.floor(baseDelaySeconds * 1000 * jitterFactor));
     timers.set(id, setTimeout(tick, delayMs));
   };
 
   const tick = async () => {
     const currentConfig = store.configs[id];
-    if (!currentConfig || !currentConfig.running) return stopRunner(id, store);
+    if (!currentConfig || !currentConfig.running) return stopRunner(id);
 
     const ADMIN_ID = process.env.ADMIN_ID;
     const access = store.access[currentConfig.userId];
     const now = Date.now();
-    
+
     if (currentConfig.userId !== ADMIN_ID) {
       if (access && access.expiresAt !== 'permanent' && now > access.expiresAt) {
-        const targetUser = currentConfig.userId;
-        
-        stopUserClient(targetUser);
-
-        delete store.access[targetUser];
-        delete store.credentials[targetUser];
-        
-        for (const [cfgId, cfg] of Object.entries(store.configs)) {
-          if (cfg.userId === targetUser) {
-            if (cfg.running) stopRunner(cfgId, store);
-            DiscordRequest(`channels/${cfg.controllerChannelId}/messages/${cfg.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
-            delete store.configs[cfgId];
-          }
-        }
-        saveStore(store);
-
-        await manageRole(currentConfig.guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'DELETE').catch(() => {});
-        await manageRole(currentConfig.guildId, targetUser, process.env.MEMBER_ROLE_ID, 'PUT').catch(() => {});
-
-        await sendDM(targetUser, {
-          embeds: [{
-            color: 0xed4245,
-            title: '⌛ SUBSCRIPTION ACCESS EXPIRED',
-            description: `Hello <@${targetUser}>! Your AutomateX subscription access period (\`${access.durationLabel || 'Standard Access'}\`) has officially ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Security Action:** All your account token data, posting configurations, and controller channels have been cleared from the database.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Automated Security Action*\n<t:${Math.floor(Date.now() / 1000)}:F>`
-          }]
-        }).catch(() => {});
+        await purgeExpiredUser(
+          currentConfig.userId,
+          access,
+          currentConfig.guildId,
+          store,
+          saveStore,
+          stopRunner,
+          'All your account token data, posting configurations, and controller channels have been cleared from the database.'
+        );
         return;
       } else if (!access) {
         currentConfig.running = false;
         currentConfig.startedAt = null;
         currentConfig.lastError = '⚠️ Access Denied: Security clearance not found.';
         saveStore(store);
-        if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
-        return stopRunner(id, store);
+        if (refreshCardCallback) refreshCardCallback(id, { force: true }).catch(() => {});
+        return stopRunner(id);
       }
     }
 
@@ -80,10 +69,11 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
     if (!activeToken) {
       currentConfig.running = false;
       currentConfig.startedAt = null;
-      currentConfig.lastError = 'Authentication Failure: No valid session token found. Execute `/add-token register` to re-authenticate.';
+      currentConfig.lastError =
+        'Authentication Failure: No valid session token found. Execute `/add-token register` to re-authenticate.';
       saveStore(store);
-      if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
-      return stopRunner(id, store);
+      if (refreshCardCallback) refreshCardCallback(id, { force: true }).catch(() => {});
+      return stopRunner(id);
     }
 
     try {
@@ -92,24 +82,24 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
       const channel = await client.channels.fetch(currentConfig.channelId);
       if (!channel) throw new Error('Target channel inaccessible.');
 
+      const payload = previewSpintax(currentConfig.text);
+
       await channel.sendTyping().catch(() => {});
-      const typingDuration = Math.min(Math.max(currentConfig.text.length * 150, 1500), 6000);
+      const typingDuration = Math.min(Math.max(payload.length * 150, 1500), 6000);
       await new Promise((resolve) => setTimeout(resolve, typingDuration));
 
-      await channel.send({ content: currentConfig.text, allowed_mentions: { parse: [] } });
-      
+      await channel.send({ content: payload, allowed_mentions: { parse: [] } });
+
       currentConfig.sent = (currentConfig.sent ?? 0) + 1;
       currentConfig.lastSentAt = Date.now();
-      currentConfig.lastError = null; // Clear previous error on successful dispatch
-      
-      // PERSIST & UPDATE CONTROLLER CARD LIVE
+      currentConfig.lastError = null;
+
       saveStore(store);
       if (refreshCardCallback) {
-        refreshCardCallback(id).catch(() => {});
+        refreshCardCallback(id, { force: false }).catch(() => {});
       }
 
       scheduleNext(currentConfig.delay);
-
     } catch (err) {
       if (err.status === 429) {
         console.warn(`Pipeline ${id}: Rate limited (429). Applying backoff penalty...`);
@@ -121,42 +111,48 @@ export function startRunner(id, immediate = true, store, saveStore, refreshCardC
         scheduleNext(currentConfig.delay);
         return;
       }
-      
+
       console.error(`Pipeline ${id} dispatch error:`, err.message);
-      
-      // Update statistics and store error info without stopping/pausing the runner
+
       currentConfig.failed = (currentConfig.failed ?? 0) + 1;
       currentConfig.lastError = `Dispatch Failed: ${err.message}`;
       saveStore(store);
-      
-      if (refreshCardCallback) refreshCardCallback(id).catch(() => {});
 
-      // --- SEND HEADS-UP DM NOTIFICATION TO USER (PIPELINE KEEPS RUNNING) ---
+      if (refreshCardCallback) refreshCardCallback(id, { force: true }).catch(() => {});
+
       await sendDM(currentConfig.userId, {
         embeds: [{
-          color: 0xed4245,
+          color: COLOR.red,
           title: '⚠️ AUTOMATEX DISPATCH NOTIFICATION',
-          description: `Your pipeline **\`${currentConfig.name}\`** encountered an issue and skipped a message dispatch to <#${currentConfig.channelId}>.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Reason:** \`${err.message}\`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*Note:* Your pipeline is **still running** and will automatically attempt to send again on the next scheduled cycle.`,
-          timestamp: new Date().toISOString()
-        }]
+          description:
+            `Your pipeline **\`${currentConfig.name}\`** encountered an issue and skipped a message dispatch to <#${currentConfig.channelId}>.\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `**Reason:** \`${err.message}\`\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+            `*Note:* Your pipeline is **still running** and will automatically attempt to send again on the next scheduled cycle.`,
+          timestamp: new Date().toISOString(),
+        }],
       }).catch(() => {});
 
-      // Continue the schedule normally for the next cycle
       scheduleNext(currentConfig.delay);
     }
   };
 
   if (immediate) {
     tick();
+  } else if (initialDelaySec != null) {
+    scheduleNext(initialDelaySec, false);
   } else {
     scheduleNext(c.delay);
   }
 }
 
-export function stopAllRunnersForUser(guildId, userId, store, saveStore, refreshCardCallback) {
-  const mine = Object.entries(store.configs).filter(([, c]) => c.userId === userId && c.guildId === guildId && c.running);
+export function stopAllRunnersForUser(guildId, userId, store, saveStore) {
+  const mine = Object.entries(store.configs).filter(
+    ([, c]) => c.userId === userId && c.guildId === guildId && c.running
+  );
   for (const [id, c] of mine) {
-    stopRunner(id, store);
+    stopRunner(id);
     c.running = false;
     c.startedAt = null;
   }
@@ -164,44 +160,5 @@ export function stopAllRunnersForUser(guildId, userId, store, saveStore, refresh
   return mine;
 }
 
-export async function cleanupExpiredAccess(store, saveStore) {
-  const now = Date.now();
-  let updated = false;
-
-  for (const [userId, access] of Object.entries(store.access || {})) {
-    if (access && access.expiresAt !== 'permanent' && now > access.expiresAt) {
-      console.log(`[Auto-Cleanup] Access expired for user ${userId}. Sweeping credentials & roles...`);
-      
-      stopUserClient(userId);
-
-      delete store.access[userId];
-      delete store.credentials[userId];
-
-      for (const [cfgId, cfg] of Object.entries(store.configs || {})) {
-        if (cfg.userId === userId) {
-          if (cfg.running) stopRunner(cfgId, store);
-          DiscordRequest(`channels/${cfg.controllerChannelId}/messages/${cfg.cardMessageId}`, { method: 'DELETE' }).catch(() => {});
-          delete store.configs[cfgId];
-        }
-      }
-
-      const primaryGuildId = process.env.GUILD_ID;
-      if (primaryGuildId) {
-        await manageRole(primaryGuildId, userId, process.env.SUBSCRIBER_ROLE_ID, 'DELETE').catch(() => {});
-        await manageRole(primaryGuildId, userId, process.env.MEMBER_ROLE_ID, 'PUT').catch(() => {});
-      }
-
-      await sendDM(userId, {
-        embeds: [{
-          color: 0xed4245,
-          title: '⌛ SUBSCRIPTION ACCESS EXPIRED',
-          description: `Hello <@${userId}>! Your AutomateX access subscription period (\`${access.durationLabel || 'Standard Access'}\`) has ended.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Security Action:** All registered account tokens, active pipelines, and controller channels have been purged.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*AutomateX Security Sweep*\n<t:${Math.floor(Date.now() / 1000)}:F>`
-        }]
-      }).catch(() => {});
-
-      updated = true;
-    }
-  }
-
-  if (updated) saveStore(store);
-}
+export const cleanupExpiredAccess = (store, saveStore) =>
+  runCleanupExpiredAccess(store, saveStore, stopRunner);
