@@ -188,9 +188,10 @@ app.listen(PORT, () => {
       ? c.lastSentAt + c.delay * 1000
       : now + c.delay * 1000;
     const earliestSlot = nextUserSlot.get(c.userId) ?? now + 3000;
-    const scheduledAt = Math.max(now + 3000, naturalDueAt, earliestSlot);
+    const baseSlot = Math.max(now + 3000, earliestSlot);
+    const scheduledAt = Math.max(baseSlot, naturalDueAt);
 
-    nextUserSlot.set(c.userId, scheduledAt + staggerGapMs);
+    nextUserSlot.set(c.userId, baseSlot + staggerGapMs);
 
     const initialDelaySec = Math.max(3, Math.round((scheduledAt - now) / 1000));
     startRunner(id, false, store, save, refreshCard, initialDelaySec);
