@@ -48,7 +48,7 @@ export async function handleStoreAction(req, res, ctx) {
           {
             name: '🚀 NEXT STEPS & SETUP GUIDE',
             value:
-              '1️⃣ **Register Credential:** Run `/add-token register` to securely vault your account session token.\n2️⃣ **Provision Pipeline:** Run `/add-config name:MyFirstPost` to open your private setup workspace.\n3️⃣ **Command Center:** Control dispatches and view live metrics in your private controller channel.\n\n📌 *Need assistance? Visit <#1567854828670025748> for rules & policies or open a ticket to contact staff.*',
+              '1️⃣ **Register Credential:** Run `/add-token register` to securely vault your account session token.\n2️⃣ **Provision Pipeline:** Run `/add-config name:MyFirstPost` to open your private setup workspace.\n3️⃣ **Command Center:** Control dispatches and view live metrics in your private controller channel.\n\n💬 *Need assistance? Visit <#1567854828670025748> for rules & policies or open a ticket to contact staff.*',
             inline: false,
           },
         ],
@@ -66,11 +66,36 @@ export async function handleStoreAction(req, res, ctx) {
     if (!guildId) return ephemeral(res, '⚠️ Tickets can only be created inside the server.');
 
     const selected = data.values?.[0];
+    const lifeDL = store.settings?.lifetimePrice ?? 100;
     const packages = {
-      pkg_3d: { name: '3 Days Pass', pricePHP: '₱30', priceUSD: '~$0.55 USD', priceDLs: '10 Diamond Locks', configs: '10 Config Slots' },
-      pkg_7d: { name: '7 Days Pass', pricePHP: '₱60', priceUSD: '~$1.05 USD', priceDLs: '20 Diamond Locks', configs: '25 Config Slots' },
-      pkg_1m: { name: '1 Month Pass', pricePHP: '₱150', priceUSD: '~$2.60 USD', priceDLs: '50 Diamond Locks', configs: '50 Config Slots' },
-      pkg_lifetime: { name: 'Lifetime Pass', pricePHP: '₱300', priceUSD: '~$5.20 USD', priceDLs: '100 Diamond Locks', configs: 'Unlimited Configs' },
+      pkg_3d: {
+        name: '3 Days Pass',
+        pricePHP: '₱30',
+        priceUSD: '~$0.55 USD',
+        priceDLs: `${Math.max(1, Math.round(lifeDL * 0.1))} Diamond Locks`,
+        configs: '10 Config Slots',
+      },
+      pkg_7d: {
+        name: '7 Days Pass',
+        pricePHP: '₱60',
+        priceUSD: '~$1.05 USD',
+        priceDLs: `${Math.max(1, Math.round(lifeDL * 0.2))} Diamond Locks`,
+        configs: '25 Config Slots',
+      },
+      pkg_1m: {
+        name: '1 Month Pass',
+        pricePHP: '₱150',
+        priceUSD: '~$2.60 USD',
+        priceDLs: `${Math.max(1, Math.round(lifeDL * 0.5))} Diamond Locks`,
+        configs: '50 Config Slots',
+      },
+      pkg_lifetime: {
+        name: 'Lifetime Pass',
+        pricePHP: '₱300',
+        priceUSD: '~$5.20 USD',
+        priceDLs: `${lifeDL} Diamond Locks`,
+        configs: 'Unlimited Configs',
+      },
     };
 
     const pkg = packages[selected];
@@ -107,7 +132,7 @@ export async function handleStoreAction(req, res, ctx) {
             fields: [
               { name: '📦 Selected Package', value: `\`${pkg.name}\``, inline: true },
               { name: '⚙️ Pipeline Capacity', value: `\`${pkg.configs}\``, inline: true },
-              { name: '💰 Price Options', value: `• **Local Currency:** ${pkg.pricePHP}\n**USD International:** ${pkg.priceUSD}\n**Growtopia:** ${pkg.priceDLs}`, inline: false },
+              { name: '💰 Price Options', value: `• **Local Currency:** ${pkg.pricePHP}\n• **USD International:** ${pkg.priceUSD}\n• **Growtopia:** ${pkg.priceDLs}`, inline: false },
               { name: '📜 IMPORTANT NOTICE', value: 'Before you continue purchasing, please make sure you have thoroughly read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>).', inline: false },
               { name: '💳 SELECT PAYMENT METHOD BELOW', value: 'Click a button below to view specific payment account details & instructions!', inline: false },
             ],
@@ -118,7 +143,7 @@ export async function handleStoreAction(req, res, ctx) {
             row(
               btn(`pay_method:gcash:${selected}`, '🇵🇭 GCash', 3),
               btn(`pay_method:paypal:${selected}`, '🅿️ PayPal', 1),
-              btn(`pay_method:wise:${selected}`, '💸 Wise', 1),
+              btn(`pay_method:wise:${selected}`, '🌐 Wise', 1),
               btn(`pay_method:dls:${selected}`, '💎 Diamond Locks', 2)
             ),
             row(btn(`close_ticket:${ticketChannel.id}`, '🔒 Close Ticket', 4)),
@@ -144,7 +169,7 @@ export async function handleStoreAction(req, res, ctx) {
           embeds: [{
             color: COLOR.green,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: '🇵🇭 **GCash QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Scan the QR code below** using your GCash app to complete payment.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
+            description: '🇵🇭 **GCash QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Scan the QR code below** using your GCash app to complete payment.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n💬 *Please send a screenshot of the completed transaction receipt here in this channel once paid!*',
             image: { url: 'https://i.imgur.com/JHVxpgp.png' },
             footer: { text: 'AutomateX Checkout • Instant Staff Verification' },
           }],
@@ -159,7 +184,7 @@ export async function handleStoreAction(req, res, ctx) {
           embeds: [{
             color: COLOR.green,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: '🅿️ **PayPal International QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Scan the QR code below** using your PayPal app to complete payment.\n**Transfer Mode:** Friends & Family (F&F)\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
+            description: '🅿️ **PayPal International QR Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Scan the QR code below** using your PayPal app to complete payment.\n**Transfer Mode:** Friends & Family (F&F)\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n💬 *Please send a screenshot of the payment confirmation here in this channel once sent!*',
             image: { url: 'https://i.imgur.com/XjZL7id.png' },
             footer: { text: 'AutomateX Checkout • Instant Staff Verification' },
           }],
@@ -174,7 +199,7 @@ export async function handleStoreAction(req, res, ctx) {
           embeds: [{
             color: COLOR.blurple,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: '💸 **Wise International Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Please wait for assistance from our admins.**\nAn administrator will respond in this ticket shortly to provide Wise payment details and assist you with your transfer.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Thank you for your patience!*',
+            description: '🌐 **Wise International Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Please wait for assistance from our admins.**\nAn administrator will respond in this ticket shortly to provide Wise payment details and assist you with your transfer.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n💬 *Thank you for your patience!*',
             footer: { text: 'AutomateX Checkout • Admin Assistance Required' },
           }],
         },
@@ -188,7 +213,7 @@ export async function handleStoreAction(req, res, ctx) {
           embeds: [{
             color: COLOR.blurple,
             title: '💳 PAYMENT DETAILS & CHECKOUT INSTRUCTIONS',
-            description: '💎 **Growtopia Diamond Locks (DLs) Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Please wait for assistance from our admins.**\nAn administrator will join this ticket shortly to provide the World Name, trade details, or meet you in-game.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n📌 *Thank you for your patience!*',
+            description: '💎 **Growtopia Diamond Locks (DLs) Payment**\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**Please wait for assistance from our admins.**\nAn administrator will join this ticket shortly to provide the World Name, trade details, or meet you in-game.\n\n📜 **Reminder:** Please ensure you have read our server rules (<#1567187360733601833>) and terms of service (<#1567854828670025748>) before proceeding.\n\n💬 *Thank you for your patience!*',
             footer: { text: 'AutomateX Checkout • Admin Assistance Required' },
           }],
         },
@@ -214,10 +239,10 @@ export async function handleStoreAction(req, res, ctx) {
         color: COLOR.blurple,
         title: '📖 Complete Step-by-Step Guide — AutomateX',
         fields: [
-          { name: '📌 STEP 1: Register Token', value: 'Run `/add-token register` in your server and input your encrypted account session token.' },
-          { name: '📌 STEP 2: Provision Pipeline', value: 'Run `/add-config name:MY_PIPELINE` to generate a setup workspace.' },
-          { name: '📌 STEP 3: Configure Parameters', value: 'Set destination channel ID, dispatch text message, and execution interval.' },
-          { name: '📌 STEP 4: Launch Controller', value: 'Execute the pipeline from your private Command Center channel!' },
+          { name: '💬 STEP 1: Register Token', value: 'Run `/add-token register` in your server and input your encrypted account session token.' },
+          { name: '💬 STEP 2: Provision Pipeline', value: 'Run `/add-config name:MY_PIPELINE` to generate a setup workspace.' },
+          { name: '💬 STEP 3: Configure Parameters', value: 'Set destination channel ID, dispatch text message, and execution interval.' },
+          { name: '💬 STEP 4: Launch Controller', value: 'Execute the pipeline from your private Command Center channel!' },
         ],
       }],
     });
