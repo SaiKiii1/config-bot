@@ -10,7 +10,9 @@ import {
   handleEditDelayAll,
   handlePreviewSpintax,
   handleStartStaggered,
+  handleCancelStaggered,
   handleAddConfig,
+  handleDuplicateConfig,
 } from './pipelines.js';
 import { handleAddToken } from './tokens.js';
 import { handleAllowCopyConfig, handleCopyController } from './sharing.js';
@@ -48,7 +50,9 @@ const COMMAND_HANDLERS = {
   'edit-delay-all': handleEditDelayAll,
   'preview-spintax': handlePreviewSpintax,
   'start-staggered': handleStartStaggered,
+  'cancel-staggered': handleCancelStaggered,
   'add-config': handleAddConfig,
+  'duplicate-config': handleDuplicateConfig,
   'add-token': handleAddToken,
   'allow-copy-config': handleAllowCopyConfig,
   'copy-controller': handleCopyController,
