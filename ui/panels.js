@@ -104,36 +104,42 @@ export const helpEmbed = (trialDays = 7) => ({
         '3️⃣ **Controller Panel** — Execute, test, and manage active dispatches.',
     },
     {
-      name: '⚙️ Core User Commands',
+      name: '⚙️ Pipeline & Execution Commands',
       value:
-        '• **`/help`** — Display this documentation and system guide.\n' +
-        '• **`/status`** — View your system telemetry, credential status, and clearance.\n' +
-        '• **`/diagnose`** — Run a diagnostic health check on your token, controller, and failing pipelines.\n' +
-        '• **`/list-configs`** — See all of your active and saved configuration pipelines.\n' +
-        '• **`/delete-all-configs`** — Permanently purge all of your configuration pipelines and controller cards.\n' +
-        '• **`/controller`** — Open or restore your private secured Command Center channel.\n' +
-        '• **`/stop-all`** — Emergency halt all of your running configuration pipelines at once.\n' +
-        '• **`/pause-errors`** — Pause only running pipelines that currently have errors.\n' +
-        '• **`/start-staggered`** — Safely launch all paused configuration pipelines sequentially with a custom delay gap.\n' +
-        '• **`/edit-delay-all`** — Bulk-update the interval across all (or paused) pipelines.\n' +
-        '• **`/preview-spintax`** — Dry-run 4 random Spintax variations before going live.\n' +
-        '• **`/add-token`** — Register, list, or purge your account session credentials.\n' +
-        '• **`/add-config`** — Create a new automated posting configuration.\n' +
-        '• **`/allow-copy-config`** — Toggle your controller template sharing status on/off.\n' +
-        '• **`/copy-controller`** — Mirror another operator\'s shared controller pipelines.',
+        '• **`/add-config`** — Create a new automated posting pipeline.\n' +
+        '• **`/duplicate-config`** — Clone an existing pipeline onto a new channel.\n' +
+        '• **`/list-configs`** — Display all active and saved pipelines.\n' +
+        '• **`/start-staggered`** — Launch paused pipelines sequentially in waves.\n' +
+        '• **`/cancel-staggered`** — Abort an in-progress staggered rollout.\n' +
+        '• **`/stop-all`** — Emergency halt all running pipelines at once.\n' +
+        '• **`/pause-errors`** — Pause only running pipelines with errors.\n' +
+        '• **`/edit-delay-all`** — Bulk-update intervals across pipelines.\n' +
+        '• **`/delete-all-configs`** — Permanently delete all pipelines and cards.',
+    },
+    {
+      name: '🔐 Vault, Sharing & Telemetry Commands',
+      value:
+        '• **`/add-token`** — Register, list, or purge your account session token.\n' +
+        '• **`/controller`** — Open or restore your private Command Center channel.\n' +
+        '• **`/status`** — View system telemetry, rollout progress, and clearance.\n' +
+        '• **`/diagnose`** — Run a health check on your token, controller, and errors.\n' +
+        '• **`/preview-spintax`** — Dry-run 4 random Spintax variations without sending.\n' +
+        '• **`/allow-copy-config`** — Toggle template sharing on or off.\n' +
+        '• **`/copy-controller`** — Mirror another operator\'s shared templates.\n' +
+        '• **`/help`** — Display this documentation and system guide.',
     },
     {
       name: '🔑 Administration & Management Tools',
       value:
-        '• **`/store`** — Publish the official AutomateX license pricing and store showcase embed *(Admin)*.\n' +
-        '• **`/set-trial-duration`** — Configure the active free trial duration in days *(Admin)*.\n' +
-        '• **`/set-price`** — Configure the base Lifetime Diamond Lock price *(Admin)*.\n' +
-        '• **`/check-access`** — Verify subscription clearance and expiration status of a user *(Admin)*.\n' +
-        '• **`/grant-access`** — Authorize a user with a specific subscription duration tier *(Admin)*.\n' +
-        '• **`/extend-access`** — Add extra time to an active user without wiping their setup *(Admin)*.\n' +
-        '• **`/revoke-access`** — Terminate clearance, purge credentials, and wipe user pipelines *(Admin)*.\n' +
-        '• **`/promotion`** — Broadcast the official AutomateX launch and setup announcement embed *(Admin)*.\n' +
-        '• **`/terms-of-service`** — Publish the official legal terms of service embed *(Admin)*.',
+        '• **`/store`** — Publish the AutomateX pricing and store embed *(Admin)*.\n' +
+        '• **`/set-trial-duration`** — Set the free trial duration in days *(Admin)*.\n' +
+        '• **`/set-price`** — Configure the base Lifetime DL price *(Admin)*.\n' +
+        '• **`/check-access`** — Inspect a user\'s subscription clearance *(Admin)*.\n' +
+        '• **`/grant-access`** — Grant subscription access to a user *(Admin)*.\n' +
+        '• **`/extend-access`** — Extend an active subscription without wiping data *(Admin)*.\n' +
+        '• **`/revoke-access`** — Revoke clearance and wipe user pipelines *(Admin)*.\n' +
+        '• **`/promotion`** — Broadcast the official launch announcement *(Admin)*.\n' +
+        '• **`/terms-of-service`** — Publish the official Terms of Service *(Admin)*.',
     },
     {
       name: '🧭 Server Guide & Channels',
