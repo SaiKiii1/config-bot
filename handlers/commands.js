@@ -14,6 +14,28 @@ const reply = (res, data) =>
 const ephemeral = (res, content) => reply(res, { content });
 const notice = (res, color, title, description) => reply(res, { embeds: [{ color, title, description }] });
 
+function fmtDuration(s) {
+  const unit = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  if (s % 3600 === 0) return unit(s / 3600, 'hour');
+  if (s % 60 === 0) return unit(s / 60, 'minute');
+  return unit(s, 'second');
+}
+
+function previewSpintax(text) {
+  if (!text || typeof text !== 'string') return text;
+  let resolved = text;
+  const hasSpintax = /\{([^{}|]+(?:\|[^{}|]+)+)\}/;
+  let passes = 0;
+  while (hasSpintax.test(resolved) && passes < 10) {
+    resolved = resolved.replace(/\{([^{}|]+(?:\|[^{}|]+)+)\}/g, (_, group) => {
+      const choices = group.split('|');
+      return choices[Math.floor(Math.random() * choices.length)];
+    });
+    passes++;
+  }
+  return resolved;
+}
+
 function getMaxConfigs(userId, store) {
   const ADMIN_ID = process.env.ADMIN_ID;
   if (userId === ADMIN_ID) return Infinity;
@@ -50,11 +72,15 @@ const helpEmbed = (trialDays = 7) => ({
       value:
         '• **`/help`** — Display this documentation and system guide.\n' +
         '• **`/status`** — View your system telemetry, credential status, and clearance.\n' +
+        '• **`/diagnose`** — Run a diagnostic health check on your token, controller, and failing pipelines.\n' +
         '• **`/list-configs`** — See all of your active and saved configuration pipelines.\n' +
         '• **`/delete-all-configs`** — Permanently purge all of your configuration pipelines and controller cards.\n' +
         '• **`/controller`** — Open or restore your private secured Command Center channel.\n' +
         '• **`/stop-all`** — Emergency halt all of your running configuration pipelines at once.\n' +
+        '• **`/pause-errors`** — Pause only running pipelines that currently have errors.\n' +
         '• **`/start-staggered`** — Safely launch all paused configuration pipelines sequentially with a custom delay gap.\n' +
+        '• **`/edit-delay-all`** — Bulk-update the interval across all (or paused) pipelines.\n' +
+        '• **`/preview-spintax`** — Dry-run 4 random Spintax variations before going live.\n' +
         '• **`/add-token`** — Register, list, or purge your account session credentials.\n' +
         '• **`/add-config`** — Create a new automated posting configuration.\n' +
         '• **`/allow-copy-config`** — Toggle your controller template sharing status on/off.\n' +
@@ -68,6 +94,7 @@ const helpEmbed = (trialDays = 7) => ({
         '• **`/set-price`** — Configure the base Lifetime Diamond Lock price *(Admin)*.\n' +
         '• **`/check-access`** — Verify subscription clearance and expiration status of a user *(Admin)*.\n' +
         '• **`/grant-access`** — Authorize a user with a specific subscription duration tier *(Admin)*.\n' +
+        '• **`/extend-access`** — Add extra time to an active user without wiping their setup *(Admin)*.\n' +
         '• **`/revoke-access`** — Terminate clearance, purge credentials, and wipe user pipelines *(Admin)*.\n' +
         '• **`/promotion`** — Broadcast the official AutomateX launch and setup announcement embed *(Admin)*.\n' +
         '• **`/terms-of-service`** — Publish the official legal terms of service embed *(Admin)*.',
@@ -124,7 +151,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
   if (name === 'help') return reply(res, { embeds: [helpEmbed(trialDays)] });
   if (!guildId) return ephemeral(res, '⚠️ **Context Error**: Command execution restricted to guild servers.');
 
-  const adminCommands = ['grant-access', 'revoke-access', 'promotion', 'store', 'set-trial-duration', 'set-price'];
+  const adminCommands = ['grant-access', 'extend-access', 'revoke-access', 'promotion', 'store', 'set-trial-duration', 'set-price'];
   if (!adminCommands.includes(name) && name !== 'copy-controller' && name !== 'allow-copy-config') {
     const access = store.access[user.id];
     const now = Date.now();
@@ -138,6 +165,191 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         return notice(res, COLOR.red, '🚫 Clearance Required', 'You do not have active security clearance to operate this framework. Please contact the administrator.');
       }
     }
+  }
+
+  // --- DIAGNOSE COMMAND ---
+  if (name === 'diagnose') {
+    const mine = mineOf(guildId, user.id);
+    const credEntries = Object.entries(store.credentials[user.id] || {});
+    const hasToken = credEntries.length > 0;
+    const tokenProfile = hasToken ? `${credEntries[0][0]} (\`${credEntries[0][1].redacted}\`)` : '❌ None registered';
+
+    const access = store.access[user.id];
+    let clearanceText = '❌ No active clearance';
+    if (user.id === ADMIN_ID) {
+      clearanceText = '🛡️ Administrator (Unlimited)';
+    } else if (access) {
+      clearanceText = access.expiresAt === 'permanent'
+        ? `🟢 ${access.durationLabel} (Never expires)`
+        : `🟢 ${access.durationLabel} (Expires <t:${Math.floor(access.expiresAt / 1000)}:R>)`;
+    }
+
+    const ctrlId = store.users?.[`${guildId}:${user.id}`]?.controllerChannelId;
+    let ctrlStatus = '⚠️ Not initialized (Run `/controller`)';
+    if (ctrlId) {
+      try {
+        await DiscordRequest(`channels/${ctrlId}`);
+        ctrlStatus = `✅ Active (<#${ctrlId}>)`;
+      } catch {
+        ctrlStatus = '❌ Missing / Deleted in Discord (Run `/controller` to rebuild)';
+      }
+    }
+
+    const runningConfigs = mine.filter(([, c]) => c.running);
+    const errorConfigs = mine.filter(([, c]) => Boolean(c.lastError));
+    const activeRollout = store.staggered?.[`${guildId}:${user.id}`];
+
+    const fields = [
+      { name: '🔐 Credential Vault', value: tokenProfile, inline: false },
+      { name: '🛡️ Security Clearance', value: clearanceText, inline: true },
+      { name: '📂 Command Center', value: ctrlStatus, inline: true },
+      {
+        name: '📊 Pipeline Summary',
+        value: `Total: **${mine.length}** · Running: **${runningConfigs.length}** · Paused: **${mine.length - runningConfigs.length}** · With Errors: **${errorConfigs.length}**`,
+        inline: false,
+      },
+    ];
+
+    if (activeRollout && activeRollout.status === 'active') {
+      const nextUnix = Math.floor((activeRollout.nextRunAt || Date.now()) / 1000);
+      fields.push({
+        name: '🚀 Staggered Rollout Status',
+        value: `Active (**${activeRollout.currentRound}/${activeRollout.totalRounds}** launched, next <t:${nextUnix}:R>)`,
+        inline: false,
+      });
+    }
+
+    if (errorConfigs.length > 0) {
+      const errorList = errorConfigs
+        .slice(0, 6)
+        .map(([cfgId, c]) => `• **${c.name}** (\`${cfgId}\`) — ${String(c.lastError).slice(0, 85)}`)
+        .join('\n');
+      const extra = errorConfigs.length > 6 ? `\n*...and ${errorConfigs.length - 6} more. Check your controller cards.*` : '';
+      fields.push({
+        name: '⚠️ Pipelines Reporting Errors',
+        value: `${errorList}${extra}`,
+        inline: false,
+      });
+    }
+
+    return reply(res, {
+      embeds: [{
+        color: errorConfigs.length > 0 || !hasToken ? COLOR.amber : COLOR.green,
+        title: '🩺 AutomateX System Diagnostics',
+        description: hasToken
+          ? 'Diagnostic snapshot of your session, controller channel, and pipeline health:'
+          : '⚠️ **Action Needed:** Register a token with `/add-token register` before starting pipelines.',
+        fields,
+        footer: { text: 'AutomateX Diagnostics • Read-Only Check' },
+        timestamp: new Date().toISOString(),
+      }],
+    });
+  }
+
+  // --- PAUSE ERRORS COMMAND ---
+  if (name === 'pause-errors') {
+    const erroredRunning = mineOf(guildId, user.id).filter(([, c]) => c.running && Boolean(c.lastError));
+
+    if (!erroredRunning.length) {
+      return notice(res, COLOR.green, '✅ All Running Pipelines Healthy', 'None of your currently running pipelines have dispatch errors.');
+    }
+
+    for (const [cfgId, c] of erroredRunning) {
+      stopRunner(cfgId, store);
+      c.running = false;
+      c.startedAt = null;
+      refreshCard(cfgId).catch(() => {});
+    }
+    saveStore(store);
+
+    const preview = erroredRunning
+      .slice(0, 10)
+      .map(([cfgId, c]) => `• **${c.name}** (\`${cfgId}\`)`)
+      .join('\n');
+    const extra = erroredRunning.length > 10 ? `\n*...and ${erroredRunning.length - 10} more.*` : '';
+
+    return notice(
+      res,
+      COLOR.amber,
+      `⏸️ Paused ${erroredRunning.length} Failing Pipeline(s)`,
+      `The following pipelines were paused so healthy pipelines can continue unaffected:\n\n${preview}${extra}`
+    );
+  }
+
+  // --- EDIT DELAY ALL COMMAND ---
+  if (name === 'edit-delay-all') {
+    const newSeconds = options.find((o) => o.name === 'seconds')?.value;
+    const scope = options.find((o) => o.name === 'scope')?.value || 'all';
+
+    if (!newSeconds || newSeconds < 5 || newSeconds > 86400) {
+      return ephemeral(res, '⚠️ Interval must be between **5 seconds** and **86,400 seconds** (24 hours).');
+    }
+
+    const targets = mineOf(guildId, user.id).filter(([, c]) => (scope === 'paused' ? !c.running : true));
+
+    if (!targets.length) {
+      return notice(
+        res,
+        COLOR.amber,
+        '📭 No Matching Pipelines',
+        scope === 'paused'
+          ? 'You have no paused pipelines to update.'
+          : 'You do not have any saved pipelines yet. Run `/add-config` first.'
+      );
+    }
+
+    for (const [cfgId, c] of targets) {
+      c.delay = newSeconds;
+      refreshCard(cfgId).catch(() => {});
+    }
+    saveStore(store);
+
+    return notice(
+      res,
+      COLOR.green,
+      '⏱️ Bulk Interval Updated',
+      `Updated **${targets.length}** ${scope === 'paused' ? 'paused ' : ''}pipeline(s) to dispatch every **${fmtDuration(newSeconds)}** (\`${newSeconds}s\`).\n*Running pipelines will apply the new interval on their next cycle.*`
+    );
+  }
+
+  // --- PREVIEW SPINTAX COMMAND ---
+  if (name === 'preview-spintax') {
+    const sourceQuery = options.find((o) => o.name === 'source')?.value?.trim();
+    const customText = options.find((o) => o.name === 'text')?.value;
+
+    let rawTemplate = customText;
+    let label = 'Custom Text Input';
+
+    if (!rawTemplate && sourceQuery) {
+      const matched = mineOf(guildId, user.id).find(
+        ([cfgId, c]) => cfgId === sourceQuery || c.name.toLowerCase() === sourceQuery.toLowerCase()
+      );
+      if (!matched) {
+        return notice(
+          res,
+          COLOR.amber,
+          '🔍 Configuration Not Found',
+          `Could not find any pipeline matching \`${sourceQuery}\`. Check the Config ID on your card or run \`/list-configs\`.`
+        );
+      }
+      rawTemplate = matched[1].text;
+      label = `${matched[1].name} (\`${matched[0]}\`)`;
+    }
+
+    if (!rawTemplate) {
+      return ephemeral(res, '⚠️ Provide either a `source` config ID/name or custom `text` to preview.');
+    }
+
+    const samples = Array.from({ length: 4 }, (_, i) => `**Sample ${i + 1}:**\n> ${previewSpintax(rawTemplate).slice(0, 420)}`);
+
+    return reply(res, {
+      embeds: [{
+        color: COLOR.blurple,
+        title: `🎲 Spintax Dry-Run Preview — ${label}`,
+        description: samples.join('\n\n'),
+        footer: { text: 'Dry-run only • No messages were sent to any channel' },
+      }],
+    });
   }
 
   // --- ALLOW CONFIG COPY COMMAND (USER OPT-IN) ---
@@ -229,10 +441,13 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     try {
       res.send({ type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE, data: { flags: InteractionResponseFlags.EPHEMERAL } });
 
+      const targetUserInfo = await DiscordRequest(`users/${targetUser}`).catch(() => null);
+      const targetUsername = targetUserInfo?.username || 'operator';
+
       let targetControllerId = store.users[`${guildId}:${targetUser}`]?.controllerChannelId;
       
       if (!targetControllerId) {
-        const targetUserObj = { id: targetUser, username: 'TargetOperator' };
+        const targetUserObj = { id: targetUser, username: targetUsername };
         targetControllerId = await ensureController(guildId, targetUserObj, store, saveStore);
       }
 
@@ -242,7 +457,7 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         
         store.configs[newCfgId] = {
           userId: targetUser,
-          username: 'TargetOperator',
+          username: targetUsername,
           guildId: guildId,
           controllerChannelId: targetControllerId,
           cardMessageId: null,
@@ -516,6 +731,86 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
     return notice(res, COLOR.green, '✅ Clearance Granted', `Operator <@${targetUser}> has been authorized.\n**Duration:** ${label}`);
   }
 
+  // --- EXTEND ACCESS (ADMIN ONLY) ---
+  if (name === 'extend-access') {
+    if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
+    const targetUser = options.find((o) => o.name === 'user').value;
+    const duration = options.find((o) => o.name === 'duration').value;
+
+    const now = Date.now();
+    const DAY = 24 * 60 * 60 * 1000;
+    const existing = store.access[targetUser];
+
+    if (duration === 'perm') {
+      store.access[targetUser] = {
+        grantedAt: existing?.grantedAt || now,
+        expiresAt: 'permanent',
+        durationLabel: 'Permanent',
+      };
+      saveStore(store);
+
+      await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'PUT').catch(() => {});
+      await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'DELETE').catch(() => {});
+
+      await sendDM(targetUser, {
+        embeds: [{
+          color: COLOR.green,
+          title: '👑 SUBSCRIPTION UPGRADED TO PERMANENT',
+          description: `Hello <@${targetUser}>! Your AutomateX clearance has been upgraded to **Permanent** access with all existing configurations preserved.`,
+        }],
+      }).catch(() => {});
+
+      return notice(res, COLOR.green, '👑 Clearance Upgraded', `Operator <@${targetUser}> is now authorized for **Permanent** access.`);
+    }
+
+    let addMs = DAY;
+    let addLabel = '24 Hours';
+    switch (duration) {
+      case '24h': addMs = DAY; addLabel = '24 Hours'; break;
+      case '3d': addMs = 3 * DAY; addLabel = '3 Days'; break;
+      case '7d': addMs = 7 * DAY; addLabel = '7 Days'; break;
+      case '1w': addMs = 7 * DAY; addLabel = '1 Week'; break;
+      case '1m': addMs = 30 * DAY; addLabel = '1 Month'; break;
+    }
+
+    if (existing?.expiresAt === 'permanent') {
+      return ephemeral(res, `ℹ️ <@${targetUser}> already has **Permanent** clearance.`);
+    }
+
+    const baseTime = existing && existing.expiresAt > now ? existing.expiresAt : now;
+    const newExpiresAt = baseTime + addMs;
+    const newLabel = existing && existing.expiresAt > now
+      ? `${existing.durationLabel} (+${addLabel})`
+      : addLabel;
+
+    store.access[targetUser] = {
+      grantedAt: existing?.grantedAt || now,
+      expiresAt: newExpiresAt,
+      durationLabel: newLabel,
+      warned24h: false,
+    };
+    saveStore(store);
+
+    await manageRole(guildId, targetUser, process.env.SUBSCRIBER_ROLE_ID, 'PUT').catch(() => {});
+    await manageRole(guildId, targetUser, process.env.MEMBER_ROLE_ID, 'DELETE').catch(() => {});
+
+    const expireUnix = Math.floor(newExpiresAt / 1000);
+    await sendDM(targetUser, {
+      embeds: [{
+        color: COLOR.green,
+        title: '⏳ SUBSCRIPTION ACCESS EXTENDED',
+        description: `Hello <@${targetUser}>! Your AutomateX subscription has been extended by **${addLabel}**.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n**New Expiration:** <t:${expireUnix}:F> (<t:${expireUnix}:R>)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n*All existing tokens and pipelines remain intact.*`,
+      }],
+    }).catch(() => {});
+
+    return notice(
+      res,
+      COLOR.green,
+      '⏳ Clearance Extended',
+      `Extended <@${targetUser}> by **${addLabel}**.\n**New Expiration:** <t:${expireUnix}:F> (<t:${expireUnix}:R>)`
+    );
+  }
+
   if (name === 'revoke-access') {
     if (user.id !== ADMIN_ID) return ephemeral(res, '🚫 Access Denied: Administrator privileges required.');
     const targetUser = options.find(o => o.name === 'user').value;
@@ -617,8 +912,8 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
         color: COLOR.blurple,
         title: `📋 Configuration Registry (${mine.length}/${limitLabel})`,
         description: ctrl ? `Manage active pipelines in <#${ctrl}>.` : undefined,
-        fields: mine.map(([, c]) => ({
-          name: `${c.running ? '🟢' : '🔴'} ${c.name.slice(0, 200)}`,
+        fields: mine.map(([cfgId, c]) => ({
+          name: `${c.running ? '🟢' : '🔴'} ${c.name.slice(0, 180)} (\`${cfgId}\`)`,
           value: `Dest: <#${c.channelId}> · Dispatches: \`${c.sent ?? 0}\``,
         })),
       }],
