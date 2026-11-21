@@ -56,6 +56,32 @@ export function saveStore(store) {
   }, 300);
 }
 
+export async function flushStore(store) {
+  if (!USE_SB) {
+    fs.writeFileSync(DB_FILE, JSON.stringify(store, null, 2));
+    return;
+  }
+  if (timer) {
+    clearTimeout(timer);
+    timer = null;
+    const target = store || latest;
+    if (target) {
+      const snapshot = JSON.parse(JSON.stringify(target));
+      chain = chain
+        .then(async () => {
+          const res = await fetch(`${SB_URL}/rest/v1/kv?on_conflict=key`, {
+            method: 'POST',
+            headers: { ...sbHeaders(), Prefer: 'resolution=merge-duplicates' },
+            body: JSON.stringify({ key: 'store', value: snapshot }),
+          });
+          if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+        })
+        .catch((e) => console.error('Supabase flush failed:', e.message));
+    }
+  }
+  return chain;
+}
+
 export async function cleanupExpiredDrafts(store, saveStoreFn) {
   const EXPIRATION_MS = 10 * 60 * 1000;
   const now = Date.now();
