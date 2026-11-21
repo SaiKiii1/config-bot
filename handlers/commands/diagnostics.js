@@ -1,11 +1,18 @@
 // handlers/commands/diagnostics.js
 import { COLOR } from '../../config/constants.js';
-import { reply } from '../../ui/primitives.js';
-import { helpEmbed } from '../../ui/panels.js';
+import { reply, ephemeral } from '../../ui/primitives.js';
+import { helpEmbed, adminHelpEmbed } from '../../ui/panels.js';
 import { DiscordRequest } from '../../utils/discord.js';
 
 export function handleHelp(res, ctx) {
   return reply(res, { embeds: [helpEmbed(ctx.trialDays)] });
+}
+
+export function handleAdminHelp(req, res, ctx) {
+  if (ctx.user.id !== ctx.ADMIN_ID) {
+    return ephemeral(res, '🔑 Access Denied: Administrator privileges required.');
+  }
+  return reply(res, { embeds: [adminHelpEmbed(ctx.trialDays)] });
 }
 
 export async function handleDiagnose(req, res, ctx) {
@@ -95,16 +102,30 @@ export function handleStatus(req, res, ctx) {
   const mine = mineOf(guildId, user.id);
   const hasToken = Boolean(Object.keys(store.credentials[user.id] || {}).length);
   const clearance = store.access[user.id] || (user.id === ADMIN_ID ? { durationLabel: 'Admin Overwrite' } : null);
+  const runningCount = mine.filter(([, c]) => c.running).length;
+  const rollout = store.staggered?.[`${guildId}:${user.id}`];
+
+  const fields = [
+    { name: '🔒 Credential Vault', value: hasToken ? '✅ Provisioned' : '❌ Unregistered', inline: true },
+    { name: '🛡️ Clearance', value: clearance ? clearance.durationLabel : '❌ Revoked', inline: true },
+    { name: '⚡ Active Runners', value: `${runningCount}/${mine.length}`, inline: true },
+  ];
+
+  if (rollout && rollout.status === 'active') {
+    const nextUnix = Math.floor((rollout.nextRunAt || Date.now()) / 1000);
+    const gapSec = Math.round((rollout.delayMs || 20000) / 1000);
+    fields.push({
+      name: '🚀 Active Staggered Rollout',
+      value: `Launched **${rollout.currentRound}/${rollout.totalRounds}** pipeline(s) · Next launch <t:${nextUnix}:R> *(every ${gapSec}s)*`,
+      inline: false,
+    });
+  }
 
   return reply(res, {
     embeds: [{
       color: COLOR.green,
       title: '🟢 System Telemetry & Status',
-      fields: [
-        { name: '🔒 Credential Vault', value: hasToken ? '✅ Provisioned' : '❌ Unregistered', inline: true },
-        { name: '🛡️ Clearance', value: clearance ? clearance.durationLabel : '❌ Revoked', inline: true },
-        { name: '⚡ Active Runners', value: String(mine.filter(([, c]) => c.running).length), inline: true },
-      ],
+      fields,
     }],
   });
 }
