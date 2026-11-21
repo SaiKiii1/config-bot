@@ -115,10 +115,12 @@ export const helpEmbed = (trialDays = 7) => ({
         '• **`/stop-all`** — Emergency halt all of your running configuration pipelines at once.\n' +
         '• **`/pause-errors`** — Pause only running pipelines that currently have errors.\n' +
         '• **`/start-staggered`** — Safely launch all paused configuration pipelines sequentially with a custom delay gap.\n' +
+        '• **`/cancel-staggered`** — Abort an in-progress staggered pipeline rollout immediately.\n' +
         '• **`/edit-delay-all`** — Bulk-update the interval across all (or paused) pipelines.\n' +
         '• **`/preview-spintax`** — Dry-run 4 random Spintax variations before going live.\n' +
         '• **`/add-token`** — Register, list, or purge your account session credentials.\n' +
         '• **`/add-config`** — Create a new automated posting configuration.\n' +
+        '• **`/duplicate-config`** — Clone an existing pipeline message and interval onto a new channel.\n' +
         '• **`/allow-copy-config`** — Toggle your controller template sharing status on/off.\n' +
         '• **`/copy-controller`** — Mirror another operator\'s shared controller pipelines.',
     },
