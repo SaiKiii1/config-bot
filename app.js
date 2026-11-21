@@ -19,7 +19,7 @@ import { row, btn } from './ui/primitives.js';
 import { modal } from './ui/modals.js';
 import { setupPanel, cardPanel } from './ui/panels.js';
 import { editOriginal } from './utils/discord.js';
-import { loadStore, saveStore, cleanupExpiredDrafts } from './utils/storage.js';
+import { loadStore, saveStore, flushStore, cleanupExpiredDrafts } from './utils/storage.js';
 import { validate, parseDelay } from './utils/validators.js';
 import { ensureController, repostCards } from './services/controller.js';
 import { createTelemetry } from './services/telemetry.js';
@@ -64,7 +64,7 @@ app.post('/interactions', verifyKeyMiddleware(process.env.PUBLIC_KEY), async (re
       if (!userId || userId !== process.env.ADMIN_ID) {
         return res.send({
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: `❌ Unauthorized: Your ID (${userId}) does not match the configured admin ID.`, flags: 6 },
+          data: { content: `❌ Unauthorized: Your ID (${userId}) does not match the configured admin ID.`, flags: 64 },
         });
       }
 
@@ -216,7 +216,7 @@ async function handleShutdown(signal) {
   const forceExitTimer = setTimeout(() => process.exit(0), 4000);
   forceExitTimer.unref();
   try {
-    await Promise.resolve(saveStore(store));
+    await flushStore(store);
     console.log('[Shutdown] Store flushed successfully.');
   } catch (err) {
     console.error('[Shutdown] Failed to flush store:', err.message);
