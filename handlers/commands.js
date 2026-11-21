@@ -980,6 +980,14 @@ export async function handleCommand(req, res, store, saveStore, mineOf, ensureCo
       return editOriginal(token, { content: 'ℹ️ All of your configuration pipelines are already running or you have no active configs!' });
     }
 
+    // Persist chosen stagger gap so Railway boot recovery uses 45-60s instead of the 20s default
+    store.users ??= {};
+    store.users[`${guildId}:${user.id}`] = {
+      ...(store.users[`${guildId}:${user.id}`] || {}),
+      staggerDelaySec: delaySecs,
+    };
+    saveStore(store);
+
     await editOriginal(token, { 
       content: `🚀 **Staggered Sequential Launch Initiated!**\nActivating **${mine.length}** pipeline(s) one by one with a **${delaySecs}-second** gap between each...` 
     });
