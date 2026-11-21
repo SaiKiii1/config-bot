@@ -5,10 +5,12 @@ import { DiscordRequest } from './utils.js';
 const commands = [
   { name: 'help', description: '🛡️ Show Command Center framework documentation.' },
   { name: 'status', description: '🟢 View system telemetry and security status.' },
+  { name: 'diagnose', description: '🩺 Run a health check on your token, controller channel, and failing pipelines.' },
   { name: 'list-configs', description: '📋 Display all active configuration pipelines.' },
   { name: 'delete-all-configs', description: '🗑️ Permanently delete all of your configuration pipelines.' },
   { name: 'controller', description: '📂 Open or restore your secured Command Center channel.' },
   { name: 'stop-all', description: '⏹️ Emergency halt all active dispatch runners.' },
+  { name: 'pause-errors', description: '⚠️ Pause only running pipelines that currently have dispatch errors.' },
   {
     name: 'start-staggered',
     description: '🚀 Safely activate all paused configuration pipelines sequentially in waves.',
@@ -17,6 +19,46 @@ const commands = [
         name: 'delay_seconds',
         description: 'Delay gap in seconds between each config launch (default: 20s)',
         type: 4, // INTEGER
+        required: false,
+      }
+    ]
+  },
+  {
+    name: 'edit-delay-all',
+    description: '⏱️ Bulk-update the posting interval across all of your configuration pipelines.',
+    options: [
+      {
+        name: 'seconds',
+        description: 'New interval in seconds (5 to 86400)',
+        type: 4, // INTEGER
+        required: true,
+      },
+      {
+        name: 'scope',
+        description: 'Which pipelines to update (defaults to All)',
+        type: 3, // STRING
+        required: false,
+        choices: [
+          { name: 'All Pipelines (Running & Paused)', value: 'all' },
+          { name: 'Paused Pipelines Only', value: 'paused' },
+        ],
+      }
+    ]
+  },
+  {
+    name: 'preview-spintax',
+    description: '🎲 Dry-run 4 random Spintax variations from a config or custom text without sending.',
+    options: [
+      {
+        name: 'source',
+        description: 'Config ID (e.g. rq77h1) or exact Config Name to preview',
+        type: 3, // STRING
+        required: false,
+      },
+      {
+        name: 'text',
+        description: 'Custom Spintax message to test (e.g. {WTS|Selling} item {PM me|DM offers})',
+        type: 3, // STRING
         required: false,
       }
     ]
@@ -95,6 +137,22 @@ const commands = [
           { name: '1 Week', value: '1w' },
           { name: '1 Month', value: '1m' },
           { name: 'Permanent', value: 'perm' }
+        ]
+      }
+    ]
+  },
+  {
+    name: 'extend-access',
+    description: '⏳ (Admin) Extend a user\'s existing subscription without wiping their configs or token.',
+    options: [
+      { type: 6, name: 'user', description: 'The operator account to extend', required: true },
+      { type: 3, name: 'duration', description: 'Additional time to add', required: true,
+        choices: [
+          { name: '+24 Hours', value: '24h' },
+          { name: '+3 Days', value: '3d' },
+          { name: '+1 Week', value: '1w' },
+          { name: '+1 Month', value: '1m' },
+          { name: 'Upgrade to Permanent', value: 'perm' }
         ]
       }
     ]
