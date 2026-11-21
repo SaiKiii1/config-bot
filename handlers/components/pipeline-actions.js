@@ -1,6 +1,6 @@
 // handlers/components/pipeline-actions.js
 import { InteractionResponseType, InteractionResponseFlags } from 'discord-interactions';
-import { row, btn, reply, notYours } from '../../ui/primitives.js';
+import { row, btn, reply, ephemeral, notYours } from '../../ui/primitives.js';
 import { cardPanel } from '../../ui/panels.js';
 import { DiscordRequest } from '../../utils/discord.js';
 import { decryptCredential } from '../../utils/crypto.js';
@@ -56,7 +56,7 @@ export async function handlePipelineAction(req, res, action, p, ctx) {
         btn(`set:cfg:${cfgId}:channelId`, 'Target ID', 2),
         btn(`set:cfg:${cfgId}:text`, 'Message Text', 2),
         btn(`set:cfg:${cfgId}:delay`, 'Timer', 2),
-        btn(`refresh:${cfgId}`, '🔙 Cancel', 4)
+        btn(`refresh:${cfgId}`, '🔄 Cancel', 4)
       ),
     ];
     return res.send({ type: InteractionResponseType.UPDATE_MESSAGE, data: panel });
@@ -78,6 +78,13 @@ export async function handlePipelineAction(req, res, action, p, ctx) {
   }
 
   if (action === 'test') {
+    if (cfg.running) {
+      return ephemeral(
+        res,
+        '⚠️ **Test Blocked**: This pipeline is currently **running**. Pause it first before sending a test dispatch to prevent duplicate messages.'
+      );
+    }
+
     res.send({
       type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
       data: { flags: InteractionResponseFlags.EPHEMERAL },
