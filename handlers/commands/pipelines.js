@@ -3,8 +3,15 @@ import { InteractionResponseType, InteractionResponseFlags } from 'discord-inter
 import { COLOR, MAX_OPEN_SETUPS, getMaxConfigs } from '../../config/constants.js';
 import { row, btn, reply, ephemeral, notice, fmtDelay } from '../../ui/primitives.js';
 import { DiscordRequest, privateOverwrites } from '../../utils/discord.js';
+import { decryptCredential } from '../../utils/crypto.js';
 import { slug, previewSpintax } from '../../utils/validators.js';
-import { stopAllRunnersForUser, stopRunner, startRunner } from '../../services/runner.js';
+import { getUserClient } from '../../client-manager.js';
+import {
+  stopAllRunnersForUser,
+  stopRunner,
+  startStaggeredRollout,
+  cancelStaggeredRollout,
+} from '../../services/runner.js';
 
 export function handleListConfigs(req, res, ctx) {
   const { user, guildId, store, mineOf } = ctx;
@@ -59,15 +66,18 @@ export async function handleStopAll(req, res, ctx) {
     data: { flags: InteractionResponseFlags.EPHEMERAL },
   });
 
+  const rolloutKey = `${guildId}:${user.id}`;
+  const hadActiveRollout = store.staggered?.[rolloutKey]?.status === 'active';
   const stopped = stopAllRunnersForUser(guildId, user.id, store, saveStore);
-  for (const [id] of stopped) {
-    refreshCard(id).catch(() => {});
-  }
+
+  await Promise.allSettled(stopped.map(([id]) => refreshCard(id)));
 
   await editOriginal(token, {
     content: stopped.length
-      ? `⏹️ **Emergency Halt**: Successfully terminated ${stopped.length} active pipeline(s).`
-      : 'ℹ️ No active pipelines were running.',
+      ? `⏹️ **Emergency Halt**: Successfully terminated ${stopped.length} active pipeline(s)${hadActiveRollout ? ', aborted the in-progress staggered rollout,' : ''} and synced controller cards.`
+      : hadActiveRollout
+        ? '⏹️ **Emergency Halt**: Aborted the in-progress staggered rollout. No active pipelines were running.'
+        : 'ℹ️ No active pipelines were running.',
   }).catch(() => {});
 }
 
@@ -179,52 +189,226 @@ export function handlePreviewSpintax(req, res, ctx) {
   });
 }
 
-export async function handleStartStaggered(req, res, ctx) {
-  const { user, guildId, options, token, store, saveStore, mineOf, refreshCard, editOriginal } = ctx;
-  res.send({
-    type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { flags: InteractionResponseFlags.EPHEMERAL },
-  });
+export function handleStartStaggered(req, res, ctx) {
+  const { user, guildId, options, store, saveStore, mineOf, refreshCard } = ctx;
+  store.staggered ??= {};
+  const rolloutKey = `${guildId}:${user.id}`;
+  const existing = store.staggered[rolloutKey];
+
+  if (existing && existing.status === 'active') {
+    const nextUnix = Math.floor((existing.nextRunAt || Date.now()) / 1000);
+    return ephemeral(
+      res,
+      `⚠️ A staggered rollout is already in progress (**${existing.currentRound}/${existing.totalRounds}** launched, next round <t:${nextUnix}:R>). Run \`/cancel-staggered\` first if you want to abort and restart it.`
+    );
+  }
 
   const delaySecs = options.find((o) => o.name === 'delay_seconds')?.value || 20;
+  const orderMode = options.find((o) => o.name === 'order')?.value || 'random';
   const mine = mineOf(guildId, user.id).filter(([, c]) => !c.running);
 
   if (!mine.length) {
-    return editOriginal(token, {
-      content: 'ℹ️ All of your configuration pipelines are already running or you have no active configs!',
-    });
+    return ephemeral(res, 'ℹ️ All of your configuration pipelines are already running or you have no active configs!');
   }
 
-  store.users ??= {};
-  store.users[`${guildId}:${user.id}`] = {
-    ...(store.users[`${guildId}:${user.id}`] || {}),
-    staggerDelaySec: delaySecs,
-  };
-  saveStore(store);
-
-  await editOriginal(token, {
-    content: `🚀 **Staggered Sequential Launch Initiated!**\nActivating **${mine.length}** pipeline(s) one by one with a **${delaySecs}-second** gap between each...`,
-  });
-
-  let startedCount = 0;
-  for (const [cfgId, cfg] of mine) {
-    cfg.running = true;
-    cfg.lastError = null;
-    cfg.startedAt = Date.now();
-    saveStore(store);
-
-    startRunner(cfgId, true, store, saveStore, refreshCard);
-    refreshCard(cfgId).catch(() => {});
-    startedCount++;
-
-    if (startedCount < mine.length) {
-      await new Promise((resolve) => setTimeout(resolve, delaySecs * 1000));
+  let configIds;
+  if (orderMode === 'top_to_bottom') {
+    const toBigInt = (val) => {
+      try {
+        return val ? BigInt(val) : 0n;
+      } catch {
+        return 0n;
+      }
+    };
+    configIds = [...mine]
+      .sort(([, a], [, b]) => {
+        const idA = toBigInt(a.cardMessageId);
+        const idB = toBigInt(b.cardMessageId);
+        return idA < idB ? -1 : idA > idB ? 1 : 0;
+      })
+      .map(([cfgId]) => cfgId);
+  } else {
+    // Fisher-Yates shuffle (default: random)
+    configIds = mine.map(([cfgId]) => cfgId);
+    for (let i = configIds.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [configIds[i], configIds[j]] = [configIds[j], configIds[i]];
     }
   }
 
-  return editOriginal(token, {
-    content: `✅ **Staggered Sequence Complete!** Successfully rolled out and activated all **${startedCount}** pipeline(s) safely.`,
+  const orderLabel = orderMode === 'top_to_bottom' ? '⬇️ Top to Bottom' : '🎲 Randomized';
+  const totalDurationSec = (configIds.length - 1) * delaySecs;
+  const estFinishUnix = Math.floor((Date.now() + totalDurationSec * 1000) / 1000);
+
+  startStaggeredRollout({
+    guildId,
+    userId: user.id,
+    configIds,
+    delaySeconds: delaySecs,
+    store,
+    saveStore,
+    refreshCardCallback: refreshCard,
   });
+
+  return reply(res, {
+    content:
+      `🚀 **Staggered Launch Initiated (Saved to Database)!**\n` +
+      `Activating **${configIds.length}** pipeline(s) in **${orderLabel}** order with a **${delaySecs}-second** gap between each.\n` +
+      `⏱️ **Estimated Completion:** <t:${estFinishUnix}:R>\n` +
+      `🛡️ *Progress is persisted automatically—even if the server restarts mid-rollout, remaining rounds will resume on schedule.*\n` +
+      `*(Use \`/cancel-staggered\` at any time to stop the rollout.)*`,
+  });
+}
+
+export function handleCancelStaggered(req, res, ctx) {
+  const { user, guildId, store, saveStore } = ctx;
+  const cancelled = cancelStaggeredRollout(guildId, user.id, store, saveStore);
+
+  if (!cancelled) {
+    return ephemeral(res, 'ℹ️ You do not have an active `/start-staggered` rollout in progress.');
+  }
+
+  return reply(res, {
+    content:
+      `🛑 **Staggered Rollout Cancelled**: Stopped launching remaining pipelines (**${cancelled.currentRound}/${cancelled.totalRounds}** already activated).\n` +
+      `*Note: Already-started pipelines will keep running. Use \`/stop-all\` to pause them.*`,
+  });
+}
+
+export async function handleDuplicateConfig(req, res, ctx) {
+  const { user, guildId, options, token, store, saveStore, mineOf, ensureController, repostCards, editOriginal } = ctx;
+  const userCreds = store.credentials[user.id];
+  const firstKey = userCreds ? Object.keys(userCreds)[0] : null;
+  const activeToken = firstKey ? decryptCredential(userCreds[firstKey].encrypted) : null;
+
+  if (!activeToken) {
+    return notice(
+      res,
+      COLOR.red,
+      '🚫 Authorization Blocked',
+      'Security policy requires a registered user credential before duplicating pipelines.\n\n👉 Run `/add-token register` first.'
+    );
+  }
+
+  const sourceQuery = options.find((o) => o.name === 'source')?.value?.trim();
+  const newChannelId = options.find((o) => o.name === 'channel_id')?.value?.trim();
+  const customName = options.find((o) => o.name === 'name')?.value?.trim()?.slice(0, 50);
+
+  if (!sourceQuery || !newChannelId) {
+    return ephemeral(res, '⚠️ Please provide both the source config ID/name and the target Channel ID.');
+  }
+
+  if (!/^\d{17,20}$/.test(newChannelId)) {
+    return ephemeral(res, '⚠️ Invalid Channel ID format. Please provide a valid 17–20 digit Discord Channel Snowflake ID.');
+  }
+
+  const maxConfigs = getMaxConfigs(user.id, store);
+  const saved = mineOf(guildId, user.id).length;
+  const open = Object.values(store.drafts || {}).filter((d) => d.userId === user.id && d.guildId === guildId).length;
+
+  if (saved + open >= maxConfigs) {
+    const limitStr = maxConfigs === Infinity ? 'Unlimited' : maxConfigs;
+    const tierLabel = store.access[user.id]?.durationLabel || 'Free Trial';
+    return notice(
+      res,
+      COLOR.red,
+      '⚠️ Quota Exceeded',
+      `Maximum limit of **${limitStr}** configuration(s) reached for your clearance tier (\`${tierLabel}\`).${
+        maxConfigs !== Infinity ? '\n\n👉 *Upgrade your pass in the store channel to unlock more configuration slots!*' : ''
+      }`
+    );
+  }
+
+  const mine = mineOf(guildId, user.id);
+  const matched = mine.find(
+    ([cfgId, cfg]) => cfgId === sourceQuery || cfg.name.toLowerCase() === sourceQuery.toLowerCase()
+  );
+
+  if (!matched) {
+    return notice(
+      res,
+      COLOR.amber,
+      '🔍 Configuration Not Found',
+      `Could not find any pipeline matching \`${sourceQuery}\`.\n\nCheck the short ID printed on your controller card (e.g., \`rq77h1\`) or run \`/list-configs\`.`
+    );
+  }
+
+  const [sourceId, sourceCfg] = matched;
+
+  try {
+    res.send({
+      type: InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+      data: { flags: InteractionResponseFlags.EPHEMERAL },
+    });
+
+    const client = await getUserClient(user.id, activeToken.trim());
+    const ch = await client.channels.fetch(newChannelId);
+    if (!ch || !['GUILD_TEXT', 'GUILD_NEWS'].includes(ch.type)) {
+      return editOriginal(token, {
+        content: '',
+        embeds: [{
+          color: COLOR.red,
+          title: '⚠️ Invalid Target Channel',
+          description: `Channel \`${newChannelId}\` is not a valid text channel.`,
+        }],
+      });
+    }
+
+    const controllerId = await ensureController(guildId, user, store, saveStore);
+
+    let newCfgId = Math.random().toString(36).substring(2, 8);
+    while (store.configs[newCfgId]) {
+      newCfgId = Math.random().toString(36).substring(2, 8);
+    }
+
+    const clonedName = customName || sourceCfg.name;
+    store.configs[newCfgId] = {
+      userId: user.id,
+      username: user.username,
+      guildId,
+      controllerChannelId: controllerId,
+      cardMessageId: null,
+      name: clonedName,
+      channelId: newChannelId,
+      text: sourceCfg.text,
+      delay: sourceCfg.delay,
+      running: false,
+      startedAt: null,
+      sent: 0,
+      failed: 0,
+      lastSentAt: null,
+      lastError: null,
+      createdAt: Date.now(),
+    };
+
+    await repostCards(guildId, user.id, controllerId);
+    saveStore(store);
+
+    await editOriginal(token, {
+      content: '',
+      embeds: [{
+        color: COLOR.green,
+        title: '✅ Pipeline Duplicated Successfully',
+        description:
+          `Cloned **\`${sourceCfg.name}\`** (\`${sourceId}\`) into **\`${clonedName}\`** (\`${newCfgId}\`).\n\n` +
+          `📍 **New Target:** <#${newChannelId}>\n` +
+          `⏱️ **Interval:** Every ${sourceCfg.delay}s\n` +
+          `📂 **Command Center:** <#${controllerId}>\n` +
+          `🔒 *Created in a paused state—press Execute on the card or run \`/start-staggered\` when ready.*`,
+        timestamp: new Date().toISOString(),
+      }],
+    });
+  } catch (err) {
+    console.error('[ERROR] Failed to execute /duplicate-config:', err?.message || err);
+    const errMsg =
+      err?.code === 10003
+        ? 'Target channel does not exist or your account lacks access to it.'
+        : err?.message || 'Unknown error';
+    await editOriginal(token, {
+      content: '',
+      embeds: [{ color: COLOR.red, title: '⚠️ Duplication Failed', description: `Details: \`${errMsg}\`.` }],
+    }).catch(() => {});
+  }
 }
 
 export async function handleAddConfig(req, res, ctx) {
