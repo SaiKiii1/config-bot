@@ -49,12 +49,28 @@ export async function DiscordRequest(endpoint, { method = 'GET', body, token } =
     const res = await fetch(`${API}/${endpoint}`, fetchOptions);
     clearTimeout(timeout);
 
-    if (res.status === 429 && retries > 0) {
+    if (res.status === 429) {
       const data = await res.json().catch(() => ({}));
-      const retryAfterMs = Math.ceil((data.retry_after || 1) * 1000);
-      console.warn(`[API Rate Limit] ${endpoint} hit 429. Retrying in ${retryAfterMs}ms...`);
-      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
-      return DiscordRequest(endpoint, { method, body, token }, retries - 1);
+
+      // Error 30046 = Maximum edits to messages older than 1 hour reached (never retry)
+      if (data?.code === 30046) {
+        const err = new Error(`Discord 429 ${method} ${endpoint}: ${JSON.stringify(data)}`);
+        err.status = 429;
+        err.code = 30046;
+        throw err;
+      }
+
+      if (retries > 0) {
+        const retryAfterMs = Math.ceil((data.retry_after || 1) * 1000);
+        console.warn(`[API Rate Limit] ${endpoint} hit 429. Retrying in ${retryAfterMs}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+        return DiscordRequest(endpoint, { method, body, token }, retries - 1);
+      }
+
+      const err = new Error(`Discord 429 ${method} ${endpoint}: ${JSON.stringify(data)}`);
+      err.status = 429;
+      err.retry_after = data.retry_after;
+      throw err;
     }
 
     if (!res.ok) {
